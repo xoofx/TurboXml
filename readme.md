@@ -14,6 +14,7 @@ TurboXml is a .NET library that provides a lightweight and fast [SAX - Simple AP
   - Parse from small to very large XML documents, without allocating!
 - **Optimized with SIMD**
   - TurboXml is using some SIMD to improve parsing of large portions of XML documents.
+- Provide **precise source location** of the XML elements parsed (to report warning/errors)
 - Compatible with `net8.0+`
 - NativeAOT ready
 
