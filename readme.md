@@ -15,6 +15,7 @@ TurboXml is a .NET library that provides a lightweight and fast [SAX - Simple AP
 - **Optimized with SIMD**
   - TurboXml is using some SIMD to improve parsing of large portions of XML documents.
 - Compatible with `net8.0+`
+- NativeAOT ready
 
 ## 📃 User Guide
 
@@ -97,6 +98,14 @@ This parser is following the [Extensible Markup Language (XML) 1.0 (Fifth Editio
   - This behavior can be disabled by passing a `new XmlParserOptions(CheckBeginEndTag: false);`
 - This parser does not check for duplicated attributes.
   - It is the responsibility of the XML handler to implement such a check. The rationale is that the check can be performed more efficiently depending on user scenarios (e.g bit flags...etc.)
+
+## 🏗️ Build
+
+You need to install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). Then from the root folder:
+
+```console
+$ dotnet build src -c Release
+```
 
 ## 🪪 License
 
