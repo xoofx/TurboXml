@@ -8,7 +8,7 @@ TurboXml is a .NET library that provides a lightweight and fast [SAX - Simple AP
 
 ## ✨ Features 
 
-- Can be 40% faster than `System.Xml.XmlReader`
+- Can be 60% faster than `System.Xml.XmlReader`
 - **Zero Allocation XML Parser**
   - Callbacks received `ReadOnlySpan<char>` for the parsed elements.
   - Parse from small to very large XML documents, without allocating!
@@ -62,7 +62,7 @@ The solution contains 2 benchmarks:
 
 In general, the advantages of `TurboXml` over `System.Xml.XmlReader`:
 
-- It should be **up to 50% faster** - specially if tag names, attributes or even content are bigger than 8 consecutive characters by using SIMD instructions.
+- It should be **up to 60% faster** - specially if tag names, attributes or even content are bigger than 8 consecutive characters by using SIMD instructions.
 - It will make almost **zero allocations** - apart for the internal buffers used to pass data as `ReadOnlySpan<char>` back the the XML Handler.
 
 ### Stream Results
