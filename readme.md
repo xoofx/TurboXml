@@ -76,18 +76,18 @@ AMD Ryzen 9 7950X, 1 CPU, 32 logical and 16 physical cores
 
 | Method                              | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
 |------------------------------------ |---------:|----------:|----------:|---------:|--------:|-----------:|
+| System.Xml.XmlReader - Stream                | 6.097 ms | 0.0580 ms | 0.0542 ms | 375.0000 | 15.6250 | 6147.41 KB |
 | TurboXml - Stream                 | 3.811 ms | 0.0449 ms | 0.0420 ms |        - |       - |   13.18 KB |
 | TurboXml - Stream - SIMD Disabled | 5.044 ms | 0.0282 ms | 0.0264 ms |        - |       - |   13.19 KB |
-| System.Xml.XmlReader - Stream                | 6.097 ms | 0.0580 ms | 0.0542 ms | 375.0000 | 15.6250 | 6147.41 KB |
 
 ## String Results
 
 
 | Method                     | Mean      | Error    | StdDev   | Gen0   | Gen1   | Allocated |
 |--------------------------- |----------:|---------:|---------:|-------:|-------:|----------:|
+| XmlReader                  |  58.70 us | 0.760 us | 0.711 us | 2.9297 | 0.2441 |   49304 B |
 | TurboXml                   |  57.53 us | 0.939 us | 0.878 us |      - |      - |         - |
 | TurboXml - SIMD Disabled   | 105.06 us | 0.913 us | 0.854 us |      - |      - |         - |
-| XmlReader                  |  58.70 us | 0.760 us | 0.711 us | 2.9297 | 0.2441 |   49304 B |
 
 ## 🚨 XML Conformance and Known Limitations 
 
