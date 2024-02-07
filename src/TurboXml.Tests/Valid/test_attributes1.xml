@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root attr1="1" attr2="abcd" >
+  <child1 attr3="efghijklmnopqrst">value1</child1>
+  <child2 attr4="éà">value2</child2>
+  <child3/>
+</root>

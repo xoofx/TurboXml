@@ -1,0 +1,5 @@
+﻿XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
+Content(1:39): \n
+BeginTag(2:2): root
+Attribute(2:7)-(2:13): attr1=""
+EndTagEmpty

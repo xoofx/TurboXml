@@ -1,0 +1,20 @@
+﻿XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
+Content(1:39): \n
+BeginTag(2:2): root
+Attribute(2:7)-(2:13): attr1="1"
+Attribute(2:17)-(2:23): attr2="abcd"
+Content(2:31): \n  
+BeginTag(3:4): child1
+Attribute(3:11)-(3:17): attr3="efghijklmnopqrst"
+Content(3:36): value1
+EndTag(3:44): child1
+Content(3:51): \n  
+BeginTag(4:4): child2
+Attribute(4:11)-(4:17): attr4="éà"
+Content(4:22): value2
+EndTag(4:30): child2
+Content(4:37): \n  
+BeginTag(5:4): child3
+EndTagEmpty
+Content(5:12): \n
+EndTag(6:3): root

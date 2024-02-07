@@ -1,0 +1,13 @@
+﻿XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
+Content(1:39): \n
+BeginTag(2:2): root
+Content(2:7): \n  
+BeginTag(3:4): child1
+Content(3:11): value1
+EndTag(3:19): child1
+Content(3:26): \n  
+BeginTag(4:4): child2
+Content(4:11): value2
+EndTag(4:19): child2
+Content(4:26): \n
+EndTag(5:3): root
