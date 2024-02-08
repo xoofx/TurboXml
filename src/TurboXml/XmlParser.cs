@@ -13,7 +13,24 @@ namespace TurboXml;
 /// <param name="Encoding">Force using this encoding when parsing a stream. By default, TurboXml will detect the encoding by following the XML specs.</param>
 /// <param name="UseSimd">A flag to enable or disable the usage SIMD when parsing. Default is enabled with <c>true</c>.</param>
 /// <param name="CheckBeginEndTag">A flag to enable or disable the check for matching begin/end tags when parsing. Default is enabled with <c>true</c>.</param>
-public readonly record struct XmlParserOptions(Encoding? Encoding = null, bool UseSimd = true, bool CheckBeginEndTag = true);
+public readonly record struct XmlParserOptions(Encoding? Encoding = null, bool UseSimd = true, bool CheckBeginEndTag = true)
+{
+    /// <summary>
+    /// Default constructor.
+    /// </summary>
+    public XmlParserOptions() : this(null, true, true)
+    {
+    }
+
+    /// <summary>Force using this encoding when parsing a stream. By default, TurboXml will detect the encoding by following the XML specs.</summary>
+    public Encoding? Encoding { get; init; } = Encoding;
+
+    /// <summary>A flag to enable or disable the usage SIMD when parsing. Default is enabled with <c>true</c>.</summary>
+    public bool UseSimd { get; init; } = UseSimd;
+
+    /// <summary>A flag to enable or disable the check for matching begin/end tags when parsing. Default is enabled with <c>true</c>.</summary>
+    public bool CheckBeginEndTag { get; init; } = CheckBeginEndTag;
+}
 
 /// <summary>
 /// The TurboXML main parser. Use the static methods to parse XML from a string or a stream.
