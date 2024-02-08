@@ -1,6 +1,6 @@
 # TurboXml [![ci](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml/badge.svg)](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml) [![NuGet](https://img.shields.io/nuget/v/TurboXml.svg)](https://www.nuget.org/packages/TurboXml/)
 
-<img align="right" width="160px" height="160px" src="https://raw.githubusercontent.com/xoofx/TurboXml/main/img/TurboXml.png">
+<img align="right" width="160px" src="https://raw.githubusercontent.com/xoofx/TurboXml/main/img/TurboXml.png">
 
 TurboXml is a .NET library that provides a lightweight and fast [SAX - Simple API XML parser](https://en.wikipedia.org/wiki/Simple_API_for_XML) by using callbacks.
 
