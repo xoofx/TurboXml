@@ -1,6 +1,9 @@
 // Copyright (c) Alexandre Mutel. All rights reserved.
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
+
+using System.Runtime.CompilerServices;
+
 namespace TurboXml;
 
 /// <summary>
@@ -19,7 +22,11 @@ internal interface IXmlConfigItem
     public readonly struct Active : IXmlConfigItem
     {
         /// <inheritdoc />
-        public static bool Enabled => true;
+        public static bool Enabled
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => true;
+        }
     }
 
     /// <summary>
@@ -28,6 +35,10 @@ internal interface IXmlConfigItem
     public readonly struct Inactive : IXmlConfigItem
     {
         /// <inheritdoc />
-        public static bool Enabled => false;
+        public static bool Enabled
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => false;
+        }
     }
 }

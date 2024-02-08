@@ -41,7 +41,32 @@ public class XmlFileTests : VerifyBase
             var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
             var handler2 = new XmlReadPrintHandler() { Writer = new StringWriter() };
             XmlParser.Parse(stream, ref handler2);
-            Assert.AreEqual(result, handler2.Writer.ToString());
+            Assert.AreEqual(result, handler2.Writer.ToString(), "Result between stream and string is not matching");
+
+            foreach (var options in GetParserOptionsVariations())
+            {
+                var handler3 = new XmlReadPrintHandler() { Writer = new StringWriter() };
+                XmlParser.Parse(xml, ref handler3, options);
+                Assert.AreEqual(result, handler3.Writer.ToString(), $"Result between string and SIMD/CheckBeginEndTag is not matching with options {options}");
+
+                // Cast to force using a class
+                handler3 = new XmlReadPrintHandler() { Writer = new StringWriter() };
+                var handler3Class = (IXmlReadHandler)handler3;
+                XmlParser.Parse(xml, handler3Class, options);
+                Assert.AreEqual(result, ((XmlReadPrintHandler)handler3Class).Writer.ToString(), $"Result between string and SIMD/CheckBeginEndTag is not matching with options {options}");
+                
+                var handler4 = new XmlReadPrintHandler() { Writer = new StringWriter() };
+                stream.Position = 0;
+                XmlParser.Parse(stream, ref handler4, options);
+                Assert.AreEqual(result, handler4.Writer.ToString(), $"Result between stream and SIMD/CheckBeginEndTag is not matching with options {options}");
+
+                // Cast to force using a class
+                handler4 = new XmlReadPrintHandler() { Writer = new StringWriter() };
+                var handler4Class = (IXmlReadHandler)handler4;
+                stream.Position = 0;
+                XmlParser.Parse(stream, handler4Class, options);
+                Assert.AreEqual(result, ((XmlReadPrintHandler)handler4Class).Writer.ToString(), $"Result between stream and SIMD/CheckBeginEndTag is not matching with options {options}");
+            }
         }
 
         var settings = new VerifySettings();
@@ -51,6 +76,14 @@ public class XmlFileTests : VerifyBase
         settings.UseFileName(fileOutput);
 
         return Verify(result, settings);
+    }
+
+    private IEnumerable<XmlParserOptions> GetParserOptionsVariations()
+    {
+        yield return new XmlParserOptions();
+        yield return new XmlParserOptions() { Encoding = null, UseSimd = false, CheckBeginEndTag = false };
+        yield return new XmlParserOptions() { Encoding = null, UseSimd = true, CheckBeginEndTag = false };
+        yield return new XmlParserOptions() { Encoding = null, UseSimd = false, CheckBeginEndTag = true };
     }
 
     private class XmlTestSource : Attribute, ITestDataSource
