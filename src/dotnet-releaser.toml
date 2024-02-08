@@ -5,3 +5,6 @@ project = "TurboXml.sln"
 [github]
 user = "xoofx"
 repo = "TurboXml"
+[coverage]
+badge_upload_to_gist = true
+badge_gist_id = "4b1dc8d0fa14dd6a3846e78e5f0eafae"
