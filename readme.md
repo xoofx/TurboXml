@@ -1,4 +1,4 @@
-# TurboXml [![ci](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml/badge.svg)](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml) [![NuGet](https://img.shields.io/nuget/v/TurboXml.svg)](https://www.nuget.org/packages/TurboXml/)
+# TurboXml [![ci](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml/badge.svg)](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml) ![coverage](https://gist.githubusercontent.com/xoofx/4b1dc8d0fa14dd6a3846e78e5f0eafae/raw/dotnet-releaser-coverage-badge-xoofx-TurboXml.svg) [![NuGet](https://img.shields.io/nuget/v/TurboXml.svg)](https://www.nuget.org/packages/TurboXml/)
 
 <img align="right" width="160px" src="https://raw.githubusercontent.com/xoofx/TurboXml/main/img/TurboXml.png">
 
