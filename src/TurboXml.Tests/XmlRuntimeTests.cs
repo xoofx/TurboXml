@@ -68,6 +68,8 @@ public class XmlRuntimeTests
             (0xFDF0, 0xFFFD),
             (0x10000, 0xEFFFF)
         };
+        CheckCharRange(ranges.Where(x => x.Item1 < 0x10000).ToArray(), XmlChar.IsNameStartChar);
+        CheckCharRange(ranges.Where(x => x.Item1 < 0x10000).ToArray(), XmlChar.IsNameStartCharScalar);
         CheckCharRange(ranges.Where(x => x.Item1 < 0x10000).ToArray(), XmlChar.IsNameChar);
         CheckRuneRange(ranges, XmlChar.IsNameStartChar);
     }
