@@ -72,7 +72,7 @@ public class BenchStream
         foreach (var stream in _streams)
         {
             stream.Position = 0;
-            var reader = new XmlTextReader(new StreamReader(stream));
+            var reader = new XmlTextReader(stream);
             while (reader.Read())
             {
                 switch (reader.NodeType)
