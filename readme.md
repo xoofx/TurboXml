@@ -8,7 +8,7 @@ TurboXml is a .NET library that provides a lightweight and fast [SAX - Simple AP
 
 ## ✨ Features 
 
-- Can be 60% faster than `System.Xml.XmlReader`
+- Should be slightly faster than `System.Xml.XmlReader`
 - **Zero Allocation XML Parser**
   - Callbacks received `ReadOnlySpan<char>` for the parsed elements.
   - Parse from small to very large XML documents, without allocating!
@@ -62,7 +62,7 @@ The solution contains 2 benchmarks:
 
 In general, the advantages of `TurboXml` over `System.Xml.XmlReader`:
 
-- It should be **up to 60% faster** - specially if tag names, attributes or even content are bigger than 8 consecutive characters by using SIMD instructions.
+- It should be slightly faster - specially if tag names, attributes or even content are bigger than 8 consecutive characters by using SIMD instructions.
 - It will make almost **zero allocations** - apart for the internal buffers used to pass data as `ReadOnlySpan<char>` back the the XML Handler.
 
 ### Stream Results
@@ -74,6 +74,13 @@ AMD Ryzen 9 7950X, 1 CPU, 32 logical and 16 physical cores
   [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX-512F+CD+BW+DQ+VL+VBMI
   DefaultJob : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX-512F+CD+BW+DQ+VL+VBMI
 ```
+
+
+| Method                              | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
+|------------------------------------ |---------:|----------:|----------:|---------:|--------:|-----------:|
+| System.Xml.XmlReader - Stream       | 4.195 ms | 0.0285 ms | 0.0252 ms | 328.1250 | 46.8750 | 5415.46 KB |
+| TurboXml - Stream                   | 3.830 ms | 0.0726 ms | 0.0679 ms |        - |       - |   13.18 KB |
+| TurboXml - Stream - SIMD Disabled   | 4.960 ms | 0.0237 ms | 0.0198 ms |        - |       - |   13.19 KB |
 
 | Method                              | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
 |------------------------------------ |---------:|----------:|----------:|---------:|--------:|-----------:|
