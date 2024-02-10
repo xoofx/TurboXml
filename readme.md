@@ -75,27 +75,17 @@ AMD Ryzen 9 7950X, 1 CPU, 32 logical and 16 physical cores
   DefaultJob : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX-512F+CD+BW+DQ+VL+VBMI
 ```
 
-
-| Method                              | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
-|------------------------------------ |---------:|----------:|----------:|---------:|--------:|-----------:|
-| System.Xml.XmlReader - Stream       | 4.195 ms | 0.0285 ms | 0.0252 ms | 328.1250 | 46.8750 | 5415.46 KB |
-| TurboXml - Stream                   | 3.830 ms | 0.0726 ms | 0.0679 ms |        - |       - |   13.18 KB |
-| TurboXml - Stream - SIMD Disabled   | 4.960 ms | 0.0237 ms | 0.0198 ms |        - |       - |   13.19 KB |
-
-| Method                              | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
-|------------------------------------ |---------:|----------:|----------:|---------:|--------:|-----------:|
-| System.Xml.XmlReader - Stream                | 6.097 ms | 0.0580 ms | 0.0542 ms | 375.0000 | 15.6250 | 6147.41 KB |
-| TurboXml - Stream                 | 3.811 ms | 0.0449 ms | 0.0420 ms |        - |       - |   13.18 KB |
-| TurboXml - Stream - SIMD Disabled | 5.044 ms | 0.0282 ms | 0.0264 ms |        - |       - |   13.19 KB |
+| Method                          | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
+|-------------------------------- |---------:|----------:|----------:|---------:|--------:|-----------:|
+| TurboXml - Stream               | 3.993 ms | 0.0780 ms | 0.0729 ms |        - |       - |   13.18 KB |
+| System.Xml.XmlReader - Stream   | 4.163 ms | 0.0386 ms | 0.0361 ms | 328.1250 | 46.8750 | 5415.45 KB |
 
 ## String Results
 
-
-| Method                     | Mean      | Error    | StdDev   | Gen0   | Gen1   | Allocated |
-|--------------------------- |----------:|---------:|---------:|-------:|-------:|----------:|
-| XmlReader                  |  58.70 us | 0.760 us | 0.711 us | 2.9297 | 0.2441 |   49304 B |
-| TurboXml                   |  57.53 us | 0.939 us | 0.878 us |      - |      - |         - |
-| TurboXml - SIMD Disabled   | 105.06 us | 0.913 us | 0.854 us |      - |      - |         - |
+| Method               | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
+|--------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
+| TurboXml             | 52.14 us | 1.040 us | 1.491 us |      - |      - |         - |
+| System.Xml.XmlReader | 56.98 us | 0.393 us | 0.348 us | 2.9297 | 0.2441 |   49304 B |
 
 ## 🚨 XML Conformance and Known Limitations 
 
@@ -103,7 +93,6 @@ This parser is following the [Extensible Markup Language (XML) 1.0 (Fifth Editio
 
 - For simplicity of the implementation, this parser does not support DTD, custom entities and XML directives (`<!DOCTYPE ...>`). If you are looking for this, you should instead use `System.Xml.XmlReader`.
 - This parser checks for well formed XML, matching begin and end tags and report an error if they are not matching
-  - This behavior can be disabled by passing a `new XmlParserOptions(CheckBeginEndTag: false);`
 - This parser does not check for duplicated attributes.
   - It is the responsibility of the XML handler to implement such a check. The rationale is that the check can be performed more efficiently depending on user scenarios (e.g bit flags...etc.)
 

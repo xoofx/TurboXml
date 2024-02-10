@@ -1,1 +1,1 @@
-﻿Error(1:14): Invalid character after version. Expecting =
+﻿Error(1:14): Invalid character found. Expecting =

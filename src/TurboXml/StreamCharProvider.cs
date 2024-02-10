@@ -23,7 +23,7 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
     private int _bufferOffset;
     private readonly char[] _text;
     private int _length;
-    private int _index;
+    private nint _index;
 
     public StreamCharProvider(Stream stream, Encoding? encoding)
     {
@@ -54,11 +54,6 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         Unsafe.SkipInit(out c);
         if (index >= _length)
         {
-            if (_length < 0)
-            {
-                return false;
-            }
-
             FillBuffer();
             index = 0;
             _index = index;
@@ -74,8 +69,14 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         return true;
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void FillBuffer()
     {
+        if (_length < 0)
+        {
+            return;
+        }
+
         var bufferOffset = _bufferOffset;
         var buffer = _buffer;
         var read = _stream.Read(buffer, bufferOffset, buffer.Length - bufferOffset);
@@ -104,28 +105,36 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
     public bool TryPreviewChar128(out Vector128<ushort> data)
     {
         var index = _index;
-        Unsafe.SkipInit(out data);
-
         if (index >= _length)
         {
-            if (_length < 0)
-            {
-                return false;
-            }
-
             FillBuffer();
             index = 0;
             _index = index;
-
-            if (_length <= 0)
-            {
-                return false;
-            }
         }
 
-        if (index + 8 <= _length)
+        if (index + Vector128<ushort>.Count <= _length)
         {
             data = Unsafe.As<char, Vector128<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(_text.AsSpan()), index));
+            return true;
+        }
+
+        Unsafe.SkipInit(out data);
+        return false;
+    }
+
+    public bool TryPreviewChar256(out Vector256<ushort> data)
+    {
+        var index = _index;
+        if (index >= _length)
+        {
+            FillBuffer();
+            index = 0;
+            _index = index;
+        }
+
+        if (index + Vector256<ushort>.Count <= _length)
+        {
+            data = Unsafe.As<char, Vector256<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(_text.AsSpan()), index));
             return true;
         }
 

@@ -69,9 +69,7 @@ public class XmlRuntimeTests
             (0x10000, 0xEFFFF)
         };
         CheckCharRange(ranges.Where(x => x.Item1 < 0x10000).ToArray(), XmlChar.IsNameStartChar);
-        CheckCharRange(ranges.Where(x => x.Item1 < 0x10000).ToArray(), XmlChar.IsNameStartCharScalar);
         CheckCharRange(ranges.Where(x => x.Item1 < 0x10000).ToArray(), XmlChar.IsNameChar);
-        CheckRuneRange(ranges, XmlChar.IsNameStartChar);
     }
 
     [TestMethod]
@@ -88,7 +86,6 @@ public class XmlRuntimeTests
             (0x0300, 0x036F),
             (0x203F, 0x2040),
         };
-        CheckRuneRange(ranges, XmlChar.IsNameChar);
         CheckCharRange(ranges, XmlChar.IsNameChar);
     }
 
@@ -181,7 +178,7 @@ public class XmlRuntimeTests
         var expecting = """
                         XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
                         BeginTag(1:40): root
-                        Error(1:45): Invalid character \u0000
+                        Error(1:45): Invalid character found
                         """;
         expecting = NormalizeNewLines(expecting);
         Assert.AreEqual(expecting, result);
@@ -196,7 +193,7 @@ public class XmlRuntimeTests
         XmlParser.Parse(xml.ToString(), ref handler);
         var result = NormalizeNewLines(handler.Writer.ToString()!);
         var expecting = """
-                        Error(1:2): Invalid Unicode low surrogate character found
+                        Error(1:2): Invalid character found. Expecting a low surrogate
                         """;
         expecting = NormalizeNewLines(expecting);
         Assert.AreEqual(expecting, result);

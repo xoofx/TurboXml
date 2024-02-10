@@ -1,1 +1,1 @@
-﻿Error(1:37): Invalid character. Expecting a whitespace
+﻿Error(1:37): Invalid character found. Expecting a whitespace

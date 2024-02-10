@@ -15,7 +15,7 @@ namespace TurboXml;
 /// </summary>
 internal struct StringCharProvider : ICharProvider
 {
-    private int _index = 0;
+    private nint _index = 0;
     private readonly string _text;
 
     public StringCharProvider(string text)
@@ -30,7 +30,7 @@ internal struct StringCharProvider : ICharProvider
         var text = _text;
         if ((uint)index < (uint)text.Length)
         {
-            c = text[index];
+            c = Unsafe.Add(ref MemoryMarshal.GetReference(text.AsSpan()), index);
             _index = index + 1;
             return true;
         }
@@ -44,9 +44,23 @@ internal struct StringCharProvider : ICharProvider
     {
         var text = _text;
         var index = _index;
-        if (index + 8 <= text.Length)
+        if (index + Vector128<ushort>.Count <= text.Length)
         {
             data = Unsafe.As<char, Vector128<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(text.AsSpan()), index));
+            return true;
+        }
+
+        Unsafe.SkipInit(out data);
+        return false;
+    }
+
+    public bool TryPreviewChar256(out Vector256<ushort> data)
+    {
+        var text = _text;
+        var index = _index;
+        if (index + Vector256<ushort>.Count <= text.Length)
+        {
+            data = Unsafe.As<char, Vector256<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(text.AsSpan()), index));
             return true;
         }
 

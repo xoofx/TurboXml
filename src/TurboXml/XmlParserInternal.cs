@@ -18,13 +18,9 @@ namespace TurboXml;
 /// </summary>
 /// <typeparam name="THandler">The handler to use to process the XML document.</typeparam>
 /// <typeparam name="TCharProvider">The char provider to read the XML document.</typeparam>
-/// <typeparam name="TConfigSimd">The configuration for SIMD.</typeparam>
-/// <typeparam name="TConfigTagBeginEnd">The configuration for Begin/End tag.</typeparam>
-internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TConfigTagBeginEnd>
+internal ref struct XmlParserInternal<THandler, TCharProvider>
     where THandler : IXmlReadHandler
     where TCharProvider: ICharProvider
-    where TConfigSimd : IXmlConfigItem
-    where TConfigTagBeginEnd : IXmlConfigItem
 {
     private int _line;
     private int _column;
@@ -45,7 +41,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         _stream = ref stream;
         _charBuffer = ArrayPool<char>.Shared.Rent(128);
         _column = -1;
-        _stackNames = TConfigTagBeginEnd.Enabled ? ArrayPool<char>.Shared.Rent(128) : Array.Empty<char>();
+        _stackNames = ArrayPool<char>.Shared.Rent(128);
     }
 
     public void Dispose()
@@ -69,7 +65,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         {
             ParseImpl();
         }
-        catch (InternalXmlException e)
+        catch (XmlThrowHelper.InternalXmlException e)
         {
             _handler.OnError(e.Message, e.Line, e.Column);
         }
@@ -79,13 +75,14 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
     {
         while (true)
         {
-            if (Vector128.IsHardwareAccelerated && TConfigSimd.Enabled)
+            if (Vector128.IsHardwareAccelerated)
             {
                 // Process the content of the attribute using SIMDc
                 while (_stream.TryPreviewChar128(out var data))
                 {
                     // If there is a surrogate character, we need to stop the parsing
                     var test = Vector128.LessThan(data, Vector128.Create((ushort)' '));
+                    test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)XmlChar.HIGH_SURROGATE_START));
                     test |= Vector128.Equals(data, Vector128.Create((ushort)'&'));
                     test |= Vector128.Equals(data, Vector128.Create((ushort)'<'));
                     if (test != Vector128<ushort>.Zero)
@@ -104,7 +101,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                 break;
             }
 
-            ProcessNextChar:
+        ProcessNextChar:
             switch (c)
             {
                 case '<':
@@ -186,16 +183,23 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
 
             }
         }
+
         FlushCharacterBuffer();
 
         // Flush any errors of opened tags
-        if (TConfigTagBeginEnd.Enabled)
+        if (HasElementsInStack)
         {
-            while (HasElementsInStack)
-            {
-                var name = PopTagName();
-                _handler.OnError($"Invalid tag {name} not closed at the end of the document.", _line, _column);
-            }
+            CheckLastClosingElements();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void CheckLastClosingElements()
+    {
+        while (HasElementsInStack)
+        {
+            var name = PopTagName();
+            _handler.OnError($"Invalid tag {name} not closed at the end of the document.", _line, _column);
         }
     }
 
@@ -213,19 +217,16 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         int line = _line;
         int column = _column;
         if (!TryParseName(ref c))
-            ThrowInvalidXml($"Invalid start tag name", line, column);
+            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidBeginTag, line, column);
 
         var name = GetTextSpan();
         _handler.OnBeginTag(name, line, column);
 
-        if (TConfigTagBeginEnd.Enabled)
-        {
-            PushTagName(name);
-        }
+        PushTagName(name);
 
         ClearCharacterBuffer();
 
-        while(true)
+        while (true)
         {
             var hasSpaces = SkipSpaces(ref c);
 
@@ -237,20 +238,18 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                     c = ReadNext();
 
                     if (c != '>')
-                        ThrowInvalidXml($"Invalid character `{c}` after /");
+                        ThrowInvalidXml(XmlThrow.InvalidEndTagEmpty);
 
                     _handler.OnEndTagEmpty();
 
                     // We pop the tag name as it is an empty tag
                     // No need to check if the stack is empty as we are in a start tag
-                    if (TConfigTagBeginEnd.Enabled)
-                    {
-                        PopTagName();
-                    }
+                    PopTagName();
+
                     return;
                 default:
                     if (!hasSpaces)
-                        ThrowInvalidXml($"Invalid character found. Expecting a whitespace or />");
+                        ThrowInvalidXml(XmlThrow.InvalidCharacterExpectingWhiteSpace);
 
                     ParseAttribute(c);
                     break;
@@ -259,20 +258,17 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
             c = ReadNext();
         }
     }
-    
+
     private bool TryParseName(ref char c)
     {
         if (XmlChar.IsNameStartChar(c))
         {
             AppendCharacter(c);
         }
-        else if (char.IsHighSurrogate(c))
+        else if (XmlChar.IsNameHighSurrogate(c))
         {
-            var rune = new Rune(c, ReadLowSurrogate());
-            if (!XmlChar.IsNameStartChar(rune))
-                ThrowInvalidXml("Invalid Unicode character found while parsing name");
-
-            AppendRune(rune);
+            AppendCharacter(c);
+            AppendCharacter(ReadLowSurrogate());
         }
         else
         {
@@ -280,7 +276,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         }
 
         // Try batch to read a name
-        if (Vector128.IsHardwareAccelerated && TConfigSimd.Enabled)
+        if (Vector128.IsHardwareAccelerated)
         {
             // Process the content of the attribute using SIMD
             while (_stream.TryPreviewChar128(out var data))
@@ -304,14 +300,10 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
             {
                 AppendCharacter(c);
             }
-            else if (char.IsHighSurrogate(c))
+            else if (XmlChar.IsNameHighSurrogate(c))
             {
-                var rune = new Rune(c, ReadLowSurrogate());
-
-                if (!XmlChar.IsNameChar(rune))
-                    ThrowInvalidXml("Invalid Unicode character found while parsing name");
-
-                AppendRune(rune);
+                AppendCharacter(c);
+                AppendCharacter(ReadLowSurrogate());
             }
             else
             {
@@ -322,20 +314,21 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         return true;
     }
 
+    [SkipLocalsInit]
     private void ParseAttribute(char c)
     {
         // [41]    Attribute    ::=    Name Eq AttValue
         int nameLine = _line;
         int nameColumn = _column;
         if (!TryParseName(ref c))
-            ThrowInvalidXml($"Invalid attribute name");
+            ThrowInvalidXml(XmlThrow.InvalidAttributeName);
 
         // We don't clear the buffer after parsing the attribute name as we are going to use it for the attribute value
         var attributeName = GetTextSpan();
 
         SkipSpaces(ref c);
         if (c != '=')
-            ThrowInvalidXml($"Invalid character after attribute name");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterExpectingEqual);
 
         c = ReadNext();
         SkipSpaces(ref c);
@@ -354,45 +347,69 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         //                    |  "'" ([^<&'] | Reference)* "'"
 
         if (c != '"' && c != '\'')
-            ThrowInvalidXml($"Invalid attribute value character after =. Expecting a simple quote ' or double quote \"");
+            ThrowInvalidXml(XmlThrow.InvalidAttributeValueExpectingQuoteOrDoubleQuote);
 
         var startChar = c;
         int startIndex = _charBufferLength;
 
+        if (Vector256.IsHardwareAccelerated)
+        {
+            // Process the content of the attribute using SIMD
+            while (_stream.TryPreviewChar256(out var data))
+            {
+                // If there is a surrogate character, we need to stop the parsing
+                var test = Vector256.Equals(data, Vector256.Create((ushort)startChar));
+                test |= Vector256.GreaterThanOrEqual(data, Vector256.Create((ushort)XmlChar.HIGH_SURROGATE_START));
+                test |= Vector256.Equals(data, Vector256.Create((ushort)'&'));
+                test |= Vector256.LessThan(data, Vector256.Create((ushort)' '));
+                test |= Vector256.Equals(data, Vector256.Create((ushort)'<'));
+                if (test != Vector256<ushort>.Zero)
+                {
+                    break;
+                }
+
+                AppendCharacters(data);
+                _stream.Advance(Vector256<ushort>.Count);
+                _column += Vector256<ushort>.Count;
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated)
+        {
+            // Process the content of the attribute using SIMD
+            while (_stream.TryPreviewChar128(out var data))
+            {
+                // If there is a surrogate character, we need to stop the parsing
+                var test = Vector128.Equals(data, Vector128.Create((ushort)startChar));
+                test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)XmlChar.HIGH_SURROGATE_START));
+                test |= Vector128.Equals(data, Vector128.Create((ushort)'&'));
+                test |= Vector128.LessThan(data, Vector128.Create((ushort)' '));
+                test |= Vector128.Equals(data, Vector128.Create((ushort)'<'));
+                if (test != Vector128<ushort>.Zero)
+                {
+                    break;
+                }
+
+                AppendCharacters(data);
+                _stream.Advance(Vector128<ushort>.Count);
+                _column += Vector128<ushort>.Count;
+            }
+        }
+
         while (true)
         {
-            if (Vector128.IsHardwareAccelerated && TConfigSimd.Enabled)
-            {
-                // Process the content of the attribute using SIMD
-                while (_stream.TryPreviewChar128(out var data))
-                {
-                    // If there is a surrogate character, we need to stop the parsing
-                    var test = Vector128.Equals(data, Vector128.Create((ushort)startChar));
-                    test |= Vector128.Equals(data, Vector128.Create((ushort)'&'));
-                    test |= Vector128.LessThan(data, Vector128.Create((ushort)' '));
-                    test |= Vector128.Equals(data, Vector128.Create((ushort)'<'));
-                    if (test != Vector128<ushort>.Zero)
-                    {
-                        break;
-                    }
-
-                    AppendCharacters(data);
-                    _stream.Advance(Vector128<ushort>.Count);
-                    _column += Vector128<ushort>.Count;
-                }
-            }
-
             c = ReadNext();
 
-            ProcessNextChar:
+        ProcessNextChar:
+
             switch (c)
             {
                 case '<':
-                    ThrowInvalidXml("Invalid character < in attribute value");
+                    ThrowInvalidXml(XmlThrow.InvalidCharacterLessThanInAttributeValue);
                     break;
                 case '&':
                     ParseEntity(ref c);
-                    break;
+                    continue;
+
                 case '\n':
                     _line++;
                     _column = -1;
@@ -421,7 +438,21 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                         return GetTextSpan(startIndex);
                     }
 
-                    ValidateAndAppendCharacter(c);
+                    if (XmlChar.IsAttrValueChar(c) || c == '\'' || c == '"')
+                    {
+                        AppendCharacter(c);
+                    }
+                    else
+                    {
+                        if (char.IsHighSurrogate(c))
+                        {
+                            AppendCharacter(ReadLowSurrogate());
+                        }
+                        else
+                        {
+                            ThrowInvalidXml(XmlThrow.InvalidCharacterInAttributeValue);
+                        }
+                    }
                     break;
             }
         }
@@ -430,12 +461,12 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ValidateAndAppendCharacter(char c)
     {
-        if (!XmlChar.IsValid(c))
-            ThrowInvalidXml($"Invalid character \\u{(ushort)c:X4}");
+        if (!XmlChar.IsChar(c))
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFound);
 
         AppendCharacter(c);
     }
-    
+
     private void ParseEntity(ref char c)
     {
         // Parse EntityName
@@ -447,12 +478,13 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         {
             c = ReadNext();
 
+            int charCodePoint;
             if (c == 'x')
             {
                 c = ReadNext();
 
-                if (!XmlChar.TryGetHexDigit(c, out int charCodePoint))
-                    ThrowInvalidXml($"Invalid hex digit");
+                if (!XmlChar.TryGetHexDigit(c, out charCodePoint))
+                    ThrowInvalidXml(XmlThrow.InvalidHexDigit);
 
                 while (TryReadNext(out c))
                 {
@@ -465,17 +497,12 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                         break;
                     }
                 }
-
-                if (!Rune.IsValid(charCodePoint))
-                    ThrowInvalidXml($"Invalid character \\x{charCodePoint:X}", line, column);
-
-                AppendRune(Unsafe.BitCast<int, Rune>(charCodePoint));
             }
             else
             {
-                int charCodePoint = c - '0';
+                charCodePoint = c - '0';
                 if ((uint)charCodePoint > 9)
-                    ThrowInvalidXml($"Invalid digit");
+                    ThrowInvalidXml(XmlThrow.InvalidDigit);
 
                 while (TryReadNext(out c))
                 {
@@ -489,15 +516,15 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                         break;
                     }
                 }
-
-                if (!Rune.IsValid(charCodePoint))
-                    ThrowInvalidXml($"Invalid character \\x{charCodePoint:X}", line, column);
-
-                AppendRune(Unsafe.BitCast<int, Rune>(charCodePoint));
             }
 
+            if (!Rune.IsValid(charCodePoint))
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
+
+            AppendValidRune(Unsafe.BitCast<int, Rune>(charCodePoint));
+
             if (c != ';')
-                ThrowInvalidXml($"Invalid character found for character reference. Expecting a closing ;");
+                ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingSemiComma);
             return;
         }
 
@@ -544,11 +571,11 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         }
 
         if (rc == 0)
-            ThrowInvalidXml($"Invalid entity name. Only &lt; or &gt; or &amp; or &apos; or &quot; are supported", line, column);
+            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidEntityName, line, column);
 
         c = ReadNext();
         if (c != ';')
-            ThrowInvalidXml($"Invalid character after entity reference. Expecting a closing ;");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingSemiComma);
 
         AppendCharacter(rc);
     }
@@ -556,7 +583,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
     private void ExpectSpaces(ref char c)
     {
         if (!XmlChar.IsWhiteSpace(c))
-            ThrowInvalidXml($"Invalid character. Expecting a whitespace");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingWhitespace);
 
         SkipSpaces(ref c);
     }
@@ -566,6 +593,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         bool hasSpaces = false;
         while (true)
         {
+        NextCharacter:
             switch (c)
             {
                 case ' ':
@@ -585,7 +613,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                     if (c != '\n')
                     {
                         _column = 0;
-                        return true;
+                        goto NextCharacter;
                     }
                     else
                     {
@@ -610,26 +638,23 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         var line = _line;
 
         if (!TryParseName(ref c))
-            ThrowInvalidXml($"Invalid end tag name", line, column);
+            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidEndTagName, line, column);
 
         SkipSpaces(ref c);
 
         if (c != '>')
-            ThrowInvalidXml($"Invalid character. Expecting a closing >");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingClosingLessThan);
 
         var name = GetTextSpan();
-        if (TConfigTagBeginEnd.Enabled)
-        {
-            if (!HasElementsInStack || !PopTagName().SequenceEqual(name))
-                ThrowInvalidXml($"Invalid end tag. No matching start tag found for {name.ToString()}", line, column);
-        }
+        if (!HasElementsInStack || !PopTagName().SequenceEqual(name))
+            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidEndTagNameFoundNotMatchingBeginTag, line, column);
 
         _handler.OnEndTag(name, line, column);
         ClearCharacterBuffer();
     }
 
     private void ParseUnsupportedXmlDirective()
-        => ThrowInvalidXml("Unsupported XML directive starting with !");
+        => ThrowInvalidXml(XmlThrow.UnsupportedXmlDirective);
 
     private void ParseCData()
     {
@@ -638,7 +663,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         {
             c = ReadNext();
             if (c != check)
-                ThrowInvalidXml($"Invalid CDATA start");
+                ThrowInvalidXml(XmlThrow.InvalidCDATAStart);
         }
 
         int startLine = _line;
@@ -646,12 +671,13 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
 
         while (true)
         {
-            if (Vector128.IsHardwareAccelerated && TConfigSimd.Enabled)
+            if (Vector128.IsHardwareAccelerated)
             {
                 // Process the content of the attribute using SIMD
                 while (_stream.TryPreviewChar128(out var data))
                 {
                     var test = Vector128.Equals(data, Vector128.Create((ushort)']'));
+                    test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)XmlChar.HIGH_SURROGATE_START));
                     test |= Vector128.LessThan(data, Vector128.Create((ushort)' '));
                     if (test != Vector128<ushort>.Zero)
                     {
@@ -666,7 +692,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
 
             c = ReadNext();
 
-            ProcessNextChar:
+        ProcessNextChar:
             switch (c)
             {
                 case ']':
@@ -711,7 +737,21 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
 
                     break;
                 default:
-                    ValidateAndAppendCharacter(c);
+                    if (XmlChar.IsCDATAChar(c))
+                    {
+                        AppendCharacter(c);
+                    }
+                    else
+                    {
+                        if (char.IsHighSurrogate(c))
+                        {
+                            AppendCharacter(ReadLowSurrogate());
+                        }
+                        else
+                        {
+                            ThrowInvalidXml(XmlThrow.InvalidCharacterFound);
+                        }
+                    }
                     break;
             }
         }
@@ -721,21 +761,21 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
     {
         var c = ReadNext();
         if (c != '-')
-            ThrowInvalidXml($"Invalid comment start");
+            ThrowInvalidXml(XmlThrow.InvalidCommentStart);
 
         int startLine = _line;
         int startColumn = _column + 1;
 
         while (true)
         {
-            if (Vector128.IsHardwareAccelerated && TConfigSimd.Enabled)
+            if (Vector128.IsHardwareAccelerated)
             {
                 // Process the content of the attribute using SIMD
                 while (_stream.TryPreviewChar128(out var data))
                 {
-                    var test= Vector128.Equals(data, Vector128.Create((ushort)'-'));
-                    test |= Vector128.Equals(data, Vector128.Create((ushort)'\r'));
-                    test |= Vector128.Equals(data, Vector128.Create((ushort)'\n'));
+                    var test = Vector128.Equals(data, Vector128.Create((ushort)'-'));
+                    test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)XmlChar.HIGH_SURROGATE_START));
+                    test |= Vector128.LessThan(data, Vector128.Create((ushort)' '));
                     if (test != Vector128<ushort>.Zero)
                     {
                         break;
@@ -749,7 +789,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
 
             c = ReadNext();
 
-            ProcessNextChar:
+        ProcessNextChar:
             switch (c)
             {
                 case '-':
@@ -759,7 +799,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                     {
                         c = ReadNext();
                         if (c != '>')
-                            ThrowInvalidXml("Invalid character found after --. Expecting a closing >");
+                            ThrowInvalidXml(XmlThrow.InvalidDoubleDashFoundExpectingClosingLessThan);
 
                         var span = GetTextSpan();
                         _handler.OnComment(span, startLine, startColumn);
@@ -795,7 +835,21 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
                     break;
 
                 default:
-                    AppendCharacter(c);
+                    if (XmlChar.IsCommentChar(c))
+                    {
+                        AppendCharacter(c);
+                    }
+                    else
+                    {
+                        if (char.IsHighSurrogate(c))
+                        {
+                            AppendCharacter(ReadLowSurrogate());
+                        }
+                        else
+                        {
+                            ThrowInvalidXml(XmlThrow.InvalidCharacterFound);
+                        }
+                    }
                     break;
             }
         }
@@ -812,22 +866,22 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         // [27]    Misc    ::=    Comment | PI | S
 
         if (_xmlParsingBody)
-            ThrowInvalidXml($"Invalid XML declaration. It must be the first node in the document");
+            ThrowInvalidXml(XmlThrow.InvalidXMLDeclarationMustBeFirst);
 
         var startLine = _line;
         var startColumn = _column;
 
         char c = ReadNext();
         if (c != 'x')
-            ThrowInvalidXml($"Invalid processing instruction name. Expecting <?xml");
+            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
 
-        c= ReadNext();
+        c = ReadNext();
         if (c != 'm')
-            ThrowInvalidXml($"Invalid processing instruction name. Expecting <?xml");
+            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
 
         c = ReadNext();
         if (c != 'l')
-            ThrowInvalidXml($"Invalid processing instruction name. Expecting <?xml");
+            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
 
         c = ReadNext();
         ExpectSpaces(ref c);
@@ -836,13 +890,13 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         var column = _column;
         // Parse version
         if (!TryParseName(ref c) || !GetTextSpan().SequenceEqual("version".AsSpan()))
-            ThrowInvalidXml($"Invalid processing instruction name. Expecting XML version attribute.", line, column);
+            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingVersionAttribute, line, column);
 
         ClearCharacterBuffer();
 
         SkipSpaces(ref c);
         if (c != '=')
-            ThrowInvalidXml($"Invalid character after version. Expecting =");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingEqual);
 
         c = ReadNext();
         SkipSpaces(ref c);
@@ -857,18 +911,18 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         if (c == 'e')
         {
             if (!hasSpaces)
-                ThrowInvalidXml($"Invalid character after version. Expecting a whitespace");
+                ThrowInvalidXml(XmlThrow.InvalidCharacterAfterVersionExpectingWhitespace);
 
             int indexEncoding = _charBufferLength;
 
             line = _line;
             column = _column;
             if (!TryParseName(ref c) || !GetTextSpan(indexEncoding).SequenceEqual("encoding".AsSpan()))
-                ThrowInvalidXml($"Invalid processing instruction name. Expecting XML encoding attribute", line, column);
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingEncodingAttribute, line, column);
 
             SkipSpaces(ref c);
             if (c != '=')
-                ThrowInvalidXml($"Invalid character after encoding. Expecting =");
+                ThrowInvalidXml(XmlThrow.InvalidCharacterFoundAfterEncodingExpectingEqual);
 
             c = ReadNext();
             SkipSpaces(ref c);
@@ -882,7 +936,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         if (c == 's')
         {
             if (!hasSpaces)
-                ThrowInvalidXml($"Invalid character. Expecting a whitespace");
+                ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingWhitespace);
 
             int indexStandalone = _charBufferLength;
 
@@ -890,10 +944,10 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
             column = _column;
             SkipSpaces(ref c);
             if (!TryParseName(ref c) || !GetTextSpan(indexStandalone).SequenceEqual("standalone".AsSpan()))
-                ThrowInvalidXml($"Invalid processing instruction name. Expecting XML standalone attribute ", line, column);
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidInstructionExpectingStandaloneAttribute, line, column);
 
             if (c != '=')
-                ThrowInvalidXml($"Invalid character after standalone. Expecting =");
+                ThrowInvalidXml(XmlThrow.InvalidCharacterFoundAfterStandaloneExpectingEqual);
 
             c = ReadNext();
             SkipSpaces(ref c);
@@ -904,12 +958,12 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         }
 
         if (c != '?')
-            ThrowInvalidXml($"Invalid character after processing instruction attributes. Expecting ?>");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingQuestionGreaterThan);
         c = ReadNext();
 
         if (c != '>')
-            ThrowInvalidXml($"Invalid character after processing instruction attributes. Expecting > after ?");
-        
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingQuestionGreaterThan);
+
         _handler.OnXmlDeclaration(version, encoding, standalone, startLine, startColumn);
         ClearCharacterBuffer();
     }
@@ -949,25 +1003,13 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         return MemoryMarshal.CreateReadOnlySpan(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(stackNames), _stackLength), length);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void EnsureSize(int minSizeAdd)
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void Resize(int minSizeAdd = 1)
     {
         var charBuffer = _charBuffer;
         var charBufferLength = _charBufferLength;
-        if (charBufferLength + minSizeAdd > charBuffer.Length)
-        {
-            var newBuffer = ArrayPool<char>.Shared.Rent(Math.Max(charBuffer.Length * 2, charBuffer.Length + minSizeAdd));
-            Array.Copy(charBuffer, newBuffer, charBufferLength);
-            ArrayPool<char>.Shared.Return(charBuffer);
-            _charBuffer = newBuffer;
-        }
-    }
-
-    private void Resize()
-    {
-        var charBuffer = _charBuffer;
-        var newBuffer = ArrayPool<char>.Shared.Rent(charBuffer.Length * 2);
-        Array.Copy(charBuffer, newBuffer, _charBufferLength);
+        var newBuffer = ArrayPool<char>.Shared.Rent(Math.Max(charBuffer.Length * 2, charBuffer.Length + minSizeAdd));
+        Array.Copy(charBuffer, newBuffer, charBufferLength);
         ArrayPool<char>.Shared.Return(charBuffer);
         _charBuffer = newBuffer;
     }
@@ -987,33 +1029,49 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
         _charBufferLength = charBufferLength;
     }
 
-    private void AppendRune(Rune rune)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AppendValidRune(Rune rune)
     {
-        EnsureSize(2);
-
-        var charBuffer = _charBuffer;
-        var charBufferLength = _charBufferLength;
         if (rune.IsBmp)
         {
-            charBuffer[charBufferLength++] = (char)rune.Value;
+            AppendCharacter((char)rune.Value);
         }
         else
         {
-            var length = rune.EncodeToUtf16(new Span<char>(charBuffer, charBufferLength, charBuffer.Length - charBufferLength));
-            charBufferLength += length;
+            var highSurrogate = (char)(0xD7C0 + (rune.Value >> 10));
+            var lowSurrogate = (char)(0xDC00 + (rune.Value & 0x3FF));
+            AppendCharacter(highSurrogate);
+            AppendCharacter(lowSurrogate);
         }
-        _charBufferLength = charBufferLength;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendCharacters(Vector128<ushort> span)
     {
-        EnsureSize(Vector128<ushort>.Count);
-
         var charBuffer = _charBuffer;
         var charBufferLength = _charBufferLength;
+        if (charBufferLength + Vector128<ushort>.Count > charBuffer.Length)
+        {
+            Resize(Vector128<ushort>.Count);
+            charBuffer = _charBuffer;
+        }
         Unsafe.As<char, Vector128<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(charBuffer), charBufferLength)) = span;
         _charBufferLength = charBufferLength + Vector128<ushort>.Count;
+    }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AppendCharacters(Vector256<ushort> span)
+    {
+        var charBuffer = _charBuffer;
+        var charBufferLength = _charBufferLength;
+        if (charBufferLength + Vector256<ushort>.Count > charBuffer.Length)
+        {
+            Resize(Vector256<ushort>.Count);
+            charBuffer = _charBuffer;
+        }
+        Unsafe.As<char, Vector256<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(charBuffer), charBufferLength)) = span;
+        _charBufferLength = charBufferLength + Vector256<ushort>.Count;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1033,30 +1091,28 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
     }
 
 
-    [DoesNotReturn]
+    [DoesNotReturn, MethodImpl(MethodImplOptions.NoInlining)]
     private void ThrowInvalidEndOfXmlStream()
-        => ThrowInvalidXml($"Invalid end of XML stream");
+        => XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidEndOfXMLStream, _line, _column);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private char ReadNext()
     {
-        char c;
-        if (!_stream.TryReadNext(out c))
-            ThrowInvalidEndOfXmlStream();
-
         _column++;
+
+        if (!_stream.TryReadNext(out char c))
+            ThrowInvalidEndOfXmlStream();
         return c;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private char ReadLowSurrogate()
     {
-        char c;
-        if (!_stream.TryReadNext(out c))
+        if (!_stream.TryReadNext(out char c))
             ThrowInvalidEndOfXmlStream();
 
         if (!char.IsLowSurrogate(c))
-            ThrowInvalidXml("Invalid Unicode low surrogate character found");
+            ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingLowSurrogate);
 
         return c;
     }
@@ -1064,30 +1120,11 @@ internal ref struct XmlParserInternal<THandler, TCharProvider, TConfigSimd, TCon
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool TryReadNext(out char c)
     {
-        if (_stream.TryReadNext(out c))
-        {
-            _column++;
-            return true;
-        }
-        return false;
+        _column++;
+        return _stream.TryReadNext(out c);
     }
 
-    [DoesNotReturn]
-    private void ThrowInvalidXml(string message)
-    {
-        throw new InternalXmlException(message, _line, _column);
-    }
-
-    [DoesNotReturn]
-    private static void ThrowInvalidXml(string message, int line, int column)
-    {
-        throw new InternalXmlException(message, line, column);
-    }
-
-    private class InternalXmlException(string message, int line, int column) : Exception(message)
-    {
-        public int Line { get; } = line;
-
-        public int Column { get; } = column;
-    }
+    [DoesNotReturn, MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowInvalidXml(XmlThrow xmlThrow)
+        => XmlThrowHelper.ThrowInvalidXml(xmlThrow, _line, _column);
 }

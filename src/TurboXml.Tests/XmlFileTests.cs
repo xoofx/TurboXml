@@ -46,13 +46,13 @@ public class XmlFileTests : VerifyBase
             foreach (var options in GetParserOptionsVariations())
             {
                 var handler3 = new XmlReadPrintHandler() { Writer = new StringWriter() };
-                XmlParser.Parse(xml, ref handler3, options);
+                XmlParser.Parse(xml, ref handler3);
                 Assert.AreEqual(result, handler3.Writer.ToString(), $"Result between string and SIMD/CheckBeginEndTag is not matching with options {options}");
 
                 // Cast to force using a class
                 handler3 = new XmlReadPrintHandler() { Writer = new StringWriter() };
                 var handler3Class = (IXmlReadHandler)handler3;
-                XmlParser.Parse(xml, handler3Class, options);
+                XmlParser.Parse(xml, handler3Class);
                 Assert.AreEqual(result, ((XmlReadPrintHandler)handler3Class).Writer.ToString(), $"Result between string and SIMD/CheckBeginEndTag is not matching with options {options}");
                 
                 var handler4 = new XmlReadPrintHandler() { Writer = new StringWriter() };
@@ -81,9 +81,6 @@ public class XmlFileTests : VerifyBase
     private IEnumerable<XmlParserOptions> GetParserOptionsVariations()
     {
         yield return new XmlParserOptions();
-        yield return new XmlParserOptions() { Encoding = null, UseSimd = false, CheckBeginEndTag = false };
-        yield return new XmlParserOptions() { Encoding = null, UseSimd = true, CheckBeginEndTag = false };
-        yield return new XmlParserOptions() { Encoding = null, UseSimd = false, CheckBeginEndTag = true };
     }
 
     private class XmlTestSource : Attribute, ITestDataSource

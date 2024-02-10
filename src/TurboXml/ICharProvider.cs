@@ -26,6 +26,13 @@ internal interface ICharProvider
     bool TryPreviewChar128(out Vector128<ushort> data);
 
     /// <summary>
+    /// Tries to read a batch of 8 characters from the input.
+    /// </summary>
+    /// <param name="data">8 characters if true is returned.</param>
+    /// <returns><c>true</c> if a batch of 8 characters was successfully read; otherwise <c>false</c></returns>
+    bool TryPreviewChar256(out Vector256<ushort> data);
+
+    /// <summary>
     /// Advance the current position by the specified number of characters.
     /// </summary>
     void Advance(int countChars);

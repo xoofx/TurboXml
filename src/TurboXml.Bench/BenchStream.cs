@@ -49,23 +49,7 @@ public class BenchStream
         return length;
     }
 
-
-    [Benchmark(Description = "TurboXml - Stream - SIMD Disabled")]
-    public long BenchTurboXmlStreamSimdDisabled()
-    {
-        long length = 0;
-        foreach (var stream in _streams)
-        {
-            stream.Position = 0;
-            var parser = new BenchString.DefaultReadHandler();
-            XmlParser.Parse(stream, ref parser, new(UseSimd: false));
-            length += parser.Length;
-        }
-
-        return length;
-    }
-
-    [Benchmark(Description = "XmlReader - Stream")]
+    [Benchmark(Description = "System.Xml.XmlReader - Stream")]
     public long BenchXmlReaderStream()
     {
         long length = 0;

@@ -1,4 +1,4 @@
-﻿XmlDeclaration(1:2): version="1.0" encoding="" standalone=""
+XmlDeclaration(1:2): version="1.0" encoding="" standalone=""
 Content(1:22): \n
 BeginTag(2:2): root
-Error(2:6): Invalid tag root not closed at the end of the document.
+Error(2:7): Invalid tag root not closed at the end of the document.

@@ -31,16 +31,7 @@ public class BenchString
         return parser.Length;
     }
 
-
-    [Benchmark(Description = "TurboXml - SIMD Disabled")]
-    public long BenchTurboXmlSimdDisabled()
-    {
-        var parser = new DefaultReadHandler();
-        XmlParser.Parse(_xmlInput, ref parser, new(UseSimd:false));
-        return parser.Length;
-    }
-
-    [Benchmark(Description = "XmlReader")]
+    [Benchmark(Description = "System.Xml.XmlReader")]
     public long BenchXmlReader()
     {
         var reader = new XmlTextReader(new StringReader(_xmlInput));
