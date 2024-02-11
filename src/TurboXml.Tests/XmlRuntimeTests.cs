@@ -2,6 +2,9 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Text;
 using System.Xml;
 
@@ -25,6 +28,26 @@ public class XmlRuntimeTests
         // Attribute(1:28)-(1:36): enabled="true"
         // Content(1:43): Hello World!
         // EndTag(1:57): root
+    }
+
+    [TestMethod]
+    public void TestCommonCharSimd()
+    {
+        if (!Vector128.IsHardwareAccelerated) return;
+
+        //                012345670123456701234567012345670123456701234567012345670123456701234567
+        var validNames = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789:--------";
+
+        var span = MemoryMarshal.Cast<char, Vector128<ushort>>(validNames.AsSpan());
+        for (int i = 0; i < span.Length; i++)
+        {
+            Assert.IsTrue(XmlChar.IsCommonNameChar(span[i]), "Characters should match CommonNameChar");
+        }
+
+        //                  012345670123456701234567012345670123456701234567012345670123456701234567
+        var invalidNames = ">=1abcde";
+        span = MemoryMarshal.Cast<char, Vector128<ushort>>(invalidNames.AsSpan());
+        Assert.IsFalse(XmlChar.IsCommonNameChar(span[0]), "Character should not match CommonNameChar");
     }
 
     struct MyHandler : IXmlReadHandler

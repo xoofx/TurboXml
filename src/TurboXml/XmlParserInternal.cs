@@ -101,7 +101,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                 break;
             }
 
-            ProcessNextChar:
+        ProcessNextChar:
             switch (c)
             {
                 case '<':
@@ -454,7 +454,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                         return GetTextSpan(startIndex);
                     }
 
-                    if (XmlChar.IsAttrValueChar(c) || c == '\'' || c == '"')
+                    if (XmlChar.IsAttrValueChar(c))
                     {
                         AppendCharacter(c);
                     }

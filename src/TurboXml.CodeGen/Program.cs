@@ -64,7 +64,7 @@ internal class Program
             bool isNameStart = IsNameStartChar(rune);
             bool isName = IsNameChar(rune);
 
-            bool isAttrValue = isChar && !isSpecialChar && !isNewLineChar && rune.Value != '\'' && rune.Value != '"';
+            bool isAttrValue = isChar && !isSpecialChar && !isNewLineChar;
             bool isCDATAChar = isChar && rune.Value != ']' && !isNewLineChar;
             bool isComment = isChar && rune.Value != '-' && !isNewLineChar;
 

@@ -90,7 +90,7 @@ internal static partial class XmlChar
         // -
         test |= Vector128.Equals(data, Vector128.Create((ushort)'-'));
         // 0-9
-        test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)'0')) & Vector128.LessThanOrEqual(data, Vector128.Create((ushort)'9'));
+        test |= Vector128.LessThanOrEqual(data - Vector128.Create((ushort)'0'), Vector128.Create((ushort)9));
         return ~test == Vector128<ushort>.Zero;
     }
 
