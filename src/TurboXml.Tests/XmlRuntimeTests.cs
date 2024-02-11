@@ -219,6 +219,36 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestInvalidSurrogate()
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        Span<char> xml = stackalloc char[] { (char)0xD800 };
+
+        XmlParser.Parse(xml.ToString(), ref handler);
+        var result = NormalizeNewLines(handler.Writer.ToString()!);
+        var expecting = """
+                        Error(1:1): Invalid end of XML stream
+                        """;
+        expecting = NormalizeNewLines(expecting);
+        Assert.AreEqual(expecting, result);
+    }
+
+    [TestMethod]
+    public void TestInvalidSurrogate2()
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        Span<char> xml = stackalloc char[] { (char)0xD800, (char)0x0001 };
+
+        XmlParser.Parse(xml.ToString(), ref handler);
+        var result = NormalizeNewLines(handler.Writer.ToString()!);
+        var expecting = """
+                        Error(1:1): Invalid character found. Expecting a low surrogate
+                        """;
+        expecting = NormalizeNewLines(expecting);
+        Assert.AreEqual(expecting, result);
+    }
+
+    [TestMethod]
     public void TestDefaultError()
     {
         var handler = new EmptyReadHandler();
@@ -243,26 +273,6 @@ public class XmlRuntimeTests
                 if (!check(rune))
                 {
                     builder.AppendLine($"Error with {i:X} - Rune Category: {char.GetUnicodeCategory(rune)}");
-                }
-            }
-        }
-
-        var text = builder.ToString();
-        Assert.AreEqual("", text);
-    }
-
-    private static void CheckRuneRange((int, int)[] ranges, Func<Rune, bool> check)
-    {
-        var builder = new StringBuilder();
-
-        foreach (var range in ranges)
-        {
-            for (int i = range.Item1; i <= range.Item2; i++)
-            {
-                var rune = new Rune(i);
-                if (!check(rune))
-                {
-                    builder.AppendLine($"Error with {i:X} - Rune Category: {Rune.GetUnicodeCategory(rune)}");
                 }
             }
         }

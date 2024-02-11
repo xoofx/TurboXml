@@ -3,12 +3,9 @@
 // See license.txt file in the project root for full license information.
 
 using System;
-using System.Diagnostics;
-using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
-using System.Text;
 
 namespace TurboXml;
 
@@ -75,27 +72,6 @@ internal static partial class XmlChar
     {
         return (GetCharCategory(c) & XmlCharCategory.WhiteSpace) != 0;
     }
-
-    /// <summary>
-    /// Test a subset of characters that are valid for a name.
-    /// </summary>
-    /// <param name="data"></param>
-    /// <returns></returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsCommonNameChar(Vector256<ushort> data)
-    {
-        // A-Z, a-z
-        var test = Vector256.LessThanOrEqual((data - Vector256.Create((ushort)'A')) & Vector256.Create((ushort)0xFFDF), Vector256.Create((ushort)25));
-        // _
-        test |= Vector256.Equals(data, Vector256.Create((ushort)'_'));
-        // :
-        test |= Vector256.Equals(data, Vector256.Create((ushort)':'));
-        // -
-        test |= Vector256.Equals(data, Vector256.Create((ushort)'-'));
-        // 0-9
-        test |= Vector256.GreaterThanOrEqual(data, Vector256.Create((ushort)'0')) & Vector256.LessThanOrEqual(data, Vector256.Create((ushort)'9'));
-        return ~test == Vector256<ushort>.Zero;
-    }
     
     /// <summary>
     /// Test a subset of characters that are valid for a name.
@@ -135,30 +111,6 @@ internal static partial class XmlChar
         return char.IsBetween(c, HIGH_SURROGATE_START, (char)0xDB7F);
     }
     
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static char UnsafeGetUtf16SurrogatesFromCodePoint(int value, out char lowSurrogateCodePoint)
-    {
-        // Assume that the codepoint has been validated before calling this method.
-        Debug.Assert(Rune.IsValid((uint)value));
-        // This calculation comes from the Unicode specification, Table 3-5.
-        lowSurrogateCodePoint = (char)((value & 0x3FFu) + 0xDC00u);
-        return (char)((value + ((0xD800u - 0x40u) << 10)) >> 10);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int UnsafeConvertToUtf32(char highSurrogate, char lowSurrogate)
-    {
-        // First, extend both to 32 bits, then calculate the offset of
-        // each candidate surrogate char from the start of its range.
-
-        uint highSurrogateOffset = (uint)highSurrogate - HIGH_SURROGATE_START;
-        // The 0x40u << 10 below is to account for uuuuu = wwww + 1 in the surrogate encoding.
-        return ((int)highSurrogateOffset << 10) + (lowSurrogate - LOW_SURROGATE_START) + (0x40 << 10);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool RuneBetween(Rune value, int min, int max) => (uint)(value.Value - min) <= (uint)(max - min);
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsNameChar(char c)
     {

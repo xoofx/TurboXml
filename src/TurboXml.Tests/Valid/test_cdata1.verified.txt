@@ -6,7 +6,7 @@ CData(3:12): <world>
 Content(3:22): \n  
 CData(4:12): 
 Content(4:15): \n  
-CData(5:12): \n\nTest\n\n  
+CData(5:12): \n\nTestLongValueWithUnicode 𐀀\n\n  
 Content(9:6): \n    
 CData(10:14):  ] ]] 
 Content(10:23): \n

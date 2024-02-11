@@ -101,7 +101,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                 break;
             }
 
-        ProcessNextChar:
+            ProcessNextChar:
             switch (c)
             {
                 case '<':
@@ -178,7 +178,23 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
 
                 default:
                     _xmlParsingBody = true;
-                    ValidateAndAppendCharacter(c);
+
+                    if (XmlChar.IsChar(c))
+                    {
+                        AppendCharacter(c);
+                    }
+                    else
+                    {
+                        if (char.IsHighSurrogate(c))
+                        {
+                            AppendCharacter(c);
+                            AppendCharacter(ReadLowSurrogate());
+                        }
+                        else
+                        {
+                            ThrowInvalidXml(XmlThrow.InvalidCharacterFound);
+                        }
+                    }
                     break;
 
             }
@@ -446,6 +462,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                     {
                         if (char.IsHighSurrogate(c))
                         {
+                            AppendCharacter(c);
                             AppendCharacter(ReadLowSurrogate());
                         }
                         else
@@ -456,15 +473,6 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                     break;
             }
         }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ValidateAndAppendCharacter(char c)
-    {
-        if (!XmlChar.IsChar(c))
-            ThrowInvalidXml(XmlThrow.InvalidCharacterFound);
-
-        AppendCharacter(c);
     }
 
     private void ParseEntity(ref char c)
@@ -745,6 +753,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                     {
                         if (char.IsHighSurrogate(c))
                         {
+                            AppendCharacter(c);
                             AppendCharacter(ReadLowSurrogate());
                         }
                         else
@@ -843,6 +852,7 @@ internal ref struct XmlParserInternal<THandler, TCharProvider>
                     {
                         if (char.IsHighSurrogate(c))
                         {
+                            AppendCharacter(c);
                             AppendCharacter(ReadLowSurrogate());
                         }
                         else

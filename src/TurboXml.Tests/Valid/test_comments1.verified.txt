@@ -6,4 +6,6 @@ Comment(3:5):  - - - -> <->
 Content(3:22): \n
 Comment(4:5): \nHello World\n
 Content(6:4): \n
-Comment(7:5): 
+Comment(7:5):  LongCommentForSIMD and a Unicode 𐀀 
+Content(7:44): \n
+Comment(8:5): 
