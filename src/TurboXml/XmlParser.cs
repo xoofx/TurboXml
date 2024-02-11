@@ -39,6 +39,9 @@ public static class XmlParser
     public static void Parse<TXmlHandler>(Stream stream, TXmlHandler handler)
         where TXmlHandler : class, IXmlReadHandler
     {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(handler);
+
         var charProvider = new StreamCharProvider(stream, null);
         try
         {
@@ -60,6 +63,8 @@ public static class XmlParser
     public static void Parse<TXmlHandler>(Stream stream, ref TXmlHandler handler)
         where TXmlHandler : struct, IXmlReadHandler
     {
+        ArgumentNullException.ThrowIfNull(stream);
+
         var charProvider = new StreamCharProvider(stream, null);
         try
         {
@@ -81,6 +86,9 @@ public static class XmlParser
     public static void Parse<TXmlHandler>(string text, TXmlHandler handler)
         where TXmlHandler : class, IXmlReadHandler
     {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(handler);
+
         var charProvider = new StringCharProvider(text);
         using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider);
         parser.Parse();
@@ -95,6 +103,8 @@ public static class XmlParser
     public static void Parse<TXmlHandler>(string text, ref TXmlHandler handler)
         where TXmlHandler : struct, IXmlReadHandler
     {
+        ArgumentNullException.ThrowIfNull(text);
+
         var charProvider = new StringCharProvider(text);
         using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider);
         parser.Parse();
@@ -109,6 +119,9 @@ public static class XmlParser
     /// <param name="options">The options to use to parse the XML.</param>
     public static void Parse<TXmlHandler>(Stream stream, TXmlHandler handler, XmlParserOptions options)where TXmlHandler : class, IXmlReadHandler
     {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(handler);
+        
         var charProvider = new StreamCharProvider(stream, options.Encoding);
         try
         {
@@ -130,6 +143,8 @@ public static class XmlParser
     /// <param name="options">The options to use to parse the XML.</param>
     public static void Parse<TXmlHandler>(Stream stream, ref TXmlHandler handler, XmlParserOptions options) where TXmlHandler : struct, IXmlReadHandler
     {
+        ArgumentNullException.ThrowIfNull(stream);
+
         var charProvider = new StreamCharProvider(stream, options.Encoding);
         try
         {
@@ -141,5 +156,4 @@ public static class XmlParser
             charProvider.Dispose();
         }
     }
-
 }
