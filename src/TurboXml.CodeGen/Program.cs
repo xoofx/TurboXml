@@ -3,6 +3,9 @@ using System.Text;
 
 namespace TurboXml.CodeGen;
 
+/// <summary>
+/// This program generates the XmlChar.Generated.cs file that contains a table with the category of each Unicode character used to quickly classify a character.
+/// </summary>
 internal class Program
 {
     [Flags]
@@ -17,8 +20,6 @@ internal class Program
         WhiteSpace = 1 << 5,
         CDATAChar = 1 << 6,
     }
-
-
 
     static void Main(string[] args)
     {
