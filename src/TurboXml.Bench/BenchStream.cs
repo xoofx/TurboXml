@@ -67,7 +67,7 @@ public class BenchStream
                         for (int i = 0; i < reader.AttributeCount; i++)
                         {
                             reader.MoveToAttribute(i);
-                            //length += reader.Name.Length + reader.Value.Length;
+                            length += reader.Name.Length + reader.Value.Length;
                             //Console.WriteLine($"Attribute: {reader.Name}={reader.Value}");
                         }
                         break;

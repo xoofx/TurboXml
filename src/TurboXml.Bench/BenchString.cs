@@ -46,11 +46,12 @@ public class BenchString
                     for (int i = 0; i < reader.AttributeCount; i++)
                     {
                         reader.MoveToAttribute(i);
-                        //length += reader.Name.Length + reader.Value.Length;
+                        length += reader.Name.Length + reader.Value.Length;
                         //Console.WriteLine($"Attribute: {reader.Name}={reader.Value}");
                     }
                     break;
                 case XmlNodeType.Text:
+                case XmlNodeType.Whitespace:
                     //Console.WriteLine($"Text: {reader.Value}");
                     length += reader.Value.Length;
                     break;
