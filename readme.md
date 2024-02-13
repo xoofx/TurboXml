@@ -62,7 +62,7 @@ The solution contains 2 benchmarks:
 
 In general, the advantages of `TurboXml` over `System.Xml.XmlReader`:
 
-- It should be slightly faster - specially if tag names, attributes or even content are bigger than 8 consecutive characters by using SIMD instructions.
+- It should be slightly faster - from 10% to 30% - or more, specially if tag names, attributes or even content are bigger than 8 consecutive characters by using SIMD instructions.
 - It will make almost **zero allocations** - apart for the internal buffers used to pass data as `ReadOnlySpan<char>` back the the XML Handler.
 
 ### Stream Results
@@ -77,15 +77,15 @@ AMD Ryzen 9 7950X, 1 CPU, 32 logical and 16 physical cores
 
 | Method                          | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated  |
 |-------------------------------- |---------:|----------:|----------:|---------:|--------:|-----------:|
-| TurboXml - Stream               | 3.993 ms | 0.0780 ms | 0.0729 ms |        - |       - |   13.18 KB |
-| System.Xml.XmlReader - Stream   | 4.163 ms | 0.0386 ms | 0.0361 ms | 328.1250 | 46.8750 | 5415.45 KB |
+| TurboXml - Stream               | 3.881 ms | 0.0151 ms | 0.0126 ms |        - |       - |   13.18 KB |
+| System.Xml.XmlReader - Stream   | 4.409 ms | 0.0431 ms | 0.0382 ms | 375.0000 | 46.8750 | 6248.56 KB |
 
 ## String Results
 
-| Method               | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
-|--------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| TurboXml             | 52.14 us | 1.040 us | 1.491 us |      - |      - |         - |
-| System.Xml.XmlReader | 56.98 us | 0.393 us | 0.348 us | 2.9297 | 0.2441 |   49304 B |
+| Method               | Mean     | Error    | StdDev   | Gen0    | Gen1   | Allocated |
+|--------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
+| TurboXml             | 54.60 us | 0.535 us | 0.501 us |       - |      - |         - |
+| System.Xml.XmlReader | 75.34 us | 0.381 us | 0.357 us | 11.5967 | 0.8545 |  194384 B |
 
 ## 🚨 XML Conformance and Known Limitations 
 
