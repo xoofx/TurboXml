@@ -110,4 +110,4 @@ This software is released under the [BSD-2-Clause license](https://opensource.or
 
 ## 🤗 Author
 
-Alexandre Mutel aka [xoofx](https://xoofx.com).
+Alexandre Mutel aka [xoofx](https://xoofx.github.io).
