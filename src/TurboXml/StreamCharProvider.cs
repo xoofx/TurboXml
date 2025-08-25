@@ -33,19 +33,23 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         _index = 0;
         _bufferOffset = 0;
 
-        var detectedEncoding = DetectEncodingOrNull(stream, out var offset);
-        if (detectedEncoding != null)
+        if (encoding is null)
         {
-            encoding ??= detectedEncoding;
+            var detectedEncoding = DetectEncodingOrNull(stream, out var offset);
+            if (detectedEncoding != null)
+            {
+                encoding ??= detectedEncoding;
+            }
+
+            encoding ??= Encoding.UTF8;
+            if (offset > 0)
+            {
+                _stream.Position += offset;
+            }
         }
-        encoding ??= Encoding.UTF8;
 
         _decoder = encoding.GetDecoder();
         _text = ArrayPool<char>.Shared.Rent(encoding.GetMaxCharCount(_buffer.Length));
-        if (offset > 0)
-        {
-            _stream.Position += offset;
-        }
     }
 
     public bool TryReadNext(out char c)
