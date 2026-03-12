@@ -103,7 +103,7 @@ internal ref struct XmlParserInternal
 
                     if (c == '?')
                     {
-                        ParseXmlDeclaration();
+                        ParseXmlDeclarationOrProcessingInstruction();
                     }
                     else if (c == '!')
                     {
@@ -887,7 +887,96 @@ internal ref struct XmlParserInternal
         }
     }
 
-    private void ParseXmlDeclaration()
+    private void ParseXmlDeclarationOrProcessingInstruction()
+    {
+        var startLine = _line;
+        var startColumn = _column;
+
+        char c = ReadNext();
+
+        if (!TryParseName(ref c))
+            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
+
+        var target = GetTextSpan();
+        if (target.SequenceEqual("xml".AsSpan()))
+        {
+            if (_xmlParsingBody)
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidXMLDeclarationMustBeFirst, startLine, startColumn);
+
+            ClearCharacterBuffer();
+            ParseXmlDeclaration(startLine, startColumn, ref c);
+            return;
+        }
+
+        if (target.Length == 3
+            && (target[0] == 'x' || target[0] == 'X')
+            && (target[1] == 'm' || target[1] == 'M')
+            && (target[2] == 'l' || target[2] == 'L'))
+        {
+            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
+        }
+
+        ClearCharacterBuffer();
+        ParseProcessingInstruction(ref c);
+    }
+
+    private void ParseProcessingInstruction(ref char c)
+    {
+        while (true)
+        {
+        ProcessNextChar:
+            switch (c)
+            {
+                case '?':
+                    c = ReadNext();
+                    if (c == '>')
+                    {
+                        ClearCharacterBuffer();
+                        return;
+                    }
+
+                    goto ProcessNextChar;
+                case '\n':
+                    _line++;
+                    _column = -1;
+                    break;
+                case '\r':
+                    if (!TryReadNext(out c))
+                        ThrowInvalidXml(XmlThrow.InvalidEndOfXMLStream);
+
+                    _line++;
+                    if (c == '\n')
+                    {
+                        _column = -1;
+                    }
+                    else
+                    {
+                        _column = 0;
+                        goto ProcessNextChar;
+                    }
+
+                    break;
+                default:
+                    if (XmlChar.IsChar(c))
+                    {
+                        break;
+                    }
+
+                    if (char.IsHighSurrogate(c))
+                    {
+                        ReadLowSurrogate();
+                        break;
+                    }
+
+                    ThrowInvalidXml(XmlThrow.InvalidCharacterFound);
+                    break;
+            }
+
+            c = ReadNext();
+        }
+    }
+
+    private void ParseXmlDeclaration(int startLine, int startColumn, ref char c)
     {
         // Prolog
         // [22]    prolog    ::=    XMLDecl? Misc* (doctypedecl Misc*)?
@@ -897,25 +986,6 @@ internal ref struct XmlParserInternal
         // [26]    VersionNum    ::=    '1.' [0-9]+
         // [27]    Misc    ::=    Comment | PI | S
 
-        if (_xmlParsingBody)
-            ThrowInvalidXml(XmlThrow.InvalidXMLDeclarationMustBeFirst);
-
-        var startLine = _line;
-        var startColumn = _column;
-
-        char c = ReadNext();
-        if (c != 'x')
-            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
-
-        c = ReadNext();
-        if (c != 'm')
-            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
-
-        c = ReadNext();
-        if (c != 'l')
-            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
-
-        c = ReadNext();
         ExpectSpaces(ref c);
 
         var line = _line;

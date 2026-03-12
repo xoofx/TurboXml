@@ -1,1 +1,1 @@
-﻿Error(1:6): Invalid character found. Expecting a whitespace
+Error(2:1): Invalid end of XML stream

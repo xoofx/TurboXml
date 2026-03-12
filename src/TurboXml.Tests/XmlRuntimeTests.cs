@@ -31,6 +31,64 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestXPacketProcessingInstructionsAreIgnored()
+    {
+        var xml = "<?xpacket begin=\"id\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/><?xpacket end=\"w\"?>";
+
+        var result = ParseEvents(xml);
+        var expecting = """
+                        BeginTag(x:xmpmeta)
+                        Attribute(xmlns:x="adobe:ns:meta/")
+                        EndTagEmpty
+                        """;
+
+        Assert.AreEqual(NormalizeNewLines(expecting), result);
+    }
+
+    [TestMethod]
+    public void TestXmlStylesheetProcessingInstructionIsIgnored()
+    {
+        var xml = """<?xml version="1.0"?><?xml-stylesheet type="text/xsl" href="style.xsl"?><root>ok</root>""";
+
+        var result = ParseEvents(xml);
+        var expecting = """
+                        XmlDeclaration(version="1.0", encoding="", standalone="")
+                        BeginTag(root)
+                        Content(ok)
+                        EndTag(root)
+                        """;
+
+        Assert.AreEqual(NormalizeNewLines(expecting), result);
+    }
+
+    [TestMethod]
+    public void TestProcessingInstructionInsideElementContentIsIgnored()
+    {
+        var xml = """<root><?custom keep="ignored"?><child /></root>""";
+
+        var result = ParseEvents(xml);
+        var expecting = """
+                        BeginTag(root)
+                        BeginTag(child)
+                        EndTagEmpty
+                        EndTag(root)
+                        """;
+
+        Assert.AreEqual(NormalizeNewLines(expecting), result);
+    }
+
+    [TestMethod]
+    public void TestXmlDeclarationMustRemainFirstAfterProcessingInstruction()
+    {
+        var xml = """<?xpacket begin="id"?><?xml version="1.0"?><root/>""";
+
+        var result = ParseEvents(xml);
+        var expecting = """Error(Invalid XML declaration. It must be the first node in the document)""";
+
+        Assert.AreEqual(expecting, result);
+    }
+
+    [TestMethod]
     public void TestCommonCharSimd()
     {
         if (!Vector128.IsHardwareAccelerated) return;
@@ -284,6 +342,13 @@ public class XmlRuntimeTests
         return text.ReplaceLineEndings("\n").TrimEnd();
     }
 
+    private static string ParseEvents(string xml)
+    {
+        var handler = new XmlEventHandler { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        return NormalizeNewLines(handler.Writer.ToString()!);
+    }
+
     private static void CheckCharRange((int, int)[] ranges, Func<char, bool> check)
     {
         var builder = new StringBuilder();
@@ -316,5 +381,31 @@ public class XmlRuntimeTests
             if (Writer is null) return;
             Writer.WriteLine($"XmlDeclaration({line + 1}:{column + 1}): version=\"{version}\" encoding=\"{encoding}\" standalone=\"{standalone}\"");
         }
+    }
+
+    private struct XmlEventHandler : IXmlReadHandler
+    {
+        public required TextWriter Writer { get; init; }
+
+        public void OnXmlDeclaration(ReadOnlySpan<char> version, ReadOnlySpan<char> encoding, ReadOnlySpan<char> standalone, int line, int column)
+            => Writer.WriteLine($"XmlDeclaration(version=\"{version}\", encoding=\"{encoding}\", standalone=\"{standalone}\")");
+
+        public void OnBeginTag(ReadOnlySpan<char> name, int line, int column)
+            => Writer.WriteLine($"BeginTag({name})");
+
+        public void OnEndTagEmpty()
+            => Writer.WriteLine("EndTagEmpty");
+
+        public void OnEndTag(ReadOnlySpan<char> name, int line, int column)
+            => Writer.WriteLine($"EndTag({name})");
+
+        public void OnAttribute(ReadOnlySpan<char> name, ReadOnlySpan<char> value, int nameLine, int nameColumn, int valueLine, int valueColumn)
+            => Writer.WriteLine($"Attribute({name}=\"{value}\")");
+
+        public void OnText(ReadOnlySpan<char> text, int line, int column)
+            => Writer.WriteLine($"Content({text})");
+
+        public void OnError(string message, int line, int column)
+            => Writer.WriteLine($"Error({message})");
     }
 }
