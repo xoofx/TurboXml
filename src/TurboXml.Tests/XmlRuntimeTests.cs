@@ -275,7 +275,7 @@ public class XmlRuntimeTests
     public void TestDefaultError()
     {
         var handler = new EmptyReadHandler();
-        Assert.ThrowsException<XmlException>(() =>
+        Assert.Throws<XmlException>(() =>
             ((IXmlReadHandler)handler).OnError("error", 1, 1));
     }
 

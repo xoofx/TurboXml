@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="MinVer" Version="7.0.0" />
+    <PackageVersion Include="MSTest" Version="4.1.0" />
+    <PackageVersion Include="Verify.MSTest" Version="31.13.2" />
+  </ItemGroup>
+</Project>
