@@ -17,4 +17,4 @@ jobs:
         uses: xoofx/.github/.github/actions/dotnet-releaser-action@main
         with:
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-          PAT_GITHUB_TOKEN: ${{ secrets.PAT_GITHUB_TOKEN }}
+          GIST_GITHUB_TOKEN: ${{ secrets.GIST_GITHUB_TOKEN }}
