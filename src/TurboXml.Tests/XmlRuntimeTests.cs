@@ -143,6 +143,87 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestDocumentTypeDeclarationIsRejectedByDefault()
+    {
+        var result = ParseEvents("""<!DOCTYPE root SYSTEM "file:///does-not-exist.dtd"><root/>""");
+
+        Assert.AreEqual("Error(Unsupported XML directive starting with !)", result);
+    }
+
+    [TestMethod]
+    public void TestDocumentTypeDeclarationCanBeIgnoredFromStringsAndStreams()
+    {
+        var options = new XmlParserOptions { IgnoreDtd = true };
+        var documentTypeDeclarations = new[]
+        {
+            "<!DOCTYPE root>",
+            """<!DOCTYPE root SYSTEM "file:///does-not-exist.dtd">""",
+            """<!DOCTYPE root PUBLIC "-//Example//DTD Root 1.0//EN" "file:///does-not-exist.dtd">""",
+            """<!DOCTYPE root [<!ELEMENT root (#PCDATA)><!ENTITY ignored "]>"><!-- ] --><?dtd-pi data?>]>""",
+        };
+        var expected = NormalizeNewLines(
+            """
+            BeginTag(root)
+            EndTagEmpty
+            """);
+
+        foreach (var documentTypeDeclaration in documentTypeDeclarations)
+        {
+            var xml = $"{documentTypeDeclaration}<root/>";
+            Assert.AreEqual(expected, ParseEvents(xml, options), documentTypeDeclaration);
+            Assert.AreEqual(expected, ParseStreamEvents(xml, options), documentTypeDeclaration);
+        }
+    }
+
+    [TestMethod]
+    public void TestProcessingInstructionInsideIgnoredDocumentTypeIsNotReported()
+    {
+        var handler = new ProcessingInstructionHandler();
+        const string xml = "<!DOCTYPE root [<?dtd-pi ignored?>]><?document-pi reported?><root/>";
+
+        XmlParser.Parse(xml, handler, new XmlParserOptions { IgnoreDtd = true });
+
+        Assert.HasCount(1, handler.Instructions);
+        Assert.AreEqual("document-pi", handler.Instructions[0].Target);
+        Assert.AreEqual(" reported", handler.Instructions[0].Data);
+    }
+
+    [TestMethod]
+    public void TestIgnoredDocumentTypeDoesNotDeclareEntities()
+    {
+        var result = ParseEvents(
+            """<!DOCTYPE root [<!ENTITY value "expanded">]><root>&value;</root>""",
+            new XmlParserOptions { IgnoreDtd = true });
+
+        Assert.AreEqual(
+            NormalizeNewLines(
+                """
+                BeginTag(root)
+                Error(Invalid entity name. Only &lt; or &gt; or &amp; or &apos; or &quot; are supported)
+                """),
+            result);
+    }
+
+    [TestMethod]
+    public void TestMalformedDocumentTypeDeclarationsAreRejectedWhenIgnored()
+    {
+        var options = new XmlParserOptions { IgnoreDtd = true };
+        var documents = new[]
+        {
+            "<!DOCTYPEroot><root/>",
+            "<!DOCTYPE root SYSTEM><root/>",
+            "<!DOCTYPE root [<!ELEMENT root ANY><root/>",
+            "<root/><!DOCTYPE root>",
+        };
+
+        foreach (var document in documents)
+        {
+            var result = ParseEvents(document, options);
+            Assert.IsTrue(result.Contains("Error(", StringComparison.Ordinal), result);
+        }
+    }
+
+    [TestMethod]
     public void TestXmlDeclarationMustRemainFirstAfterProcessingInstruction()
     {
         var xml = """<?xpacket begin="id"?><?xml version="1.0"?><root/>""";
@@ -407,10 +488,26 @@ public class XmlRuntimeTests
         return text.ReplaceLineEndings("\n").TrimEnd();
     }
 
-    private static string ParseEvents(string xml)
+    private static string ParseEvents(string xml, XmlParserOptions? options = null)
     {
         var handler = new XmlEventHandler { Writer = new StringWriter() };
-        XmlParser.Parse(xml, ref handler);
+        if (options.HasValue)
+        {
+            XmlParser.Parse(xml, ref handler, options.Value);
+        }
+        else
+        {
+            XmlParser.Parse(xml, ref handler);
+        }
+
+        return NormalizeNewLines(handler.Writer.ToString()!);
+    }
+
+    private static string ParseStreamEvents(string xml, XmlParserOptions options)
+    {
+        var handler = new XmlEventHandler { Writer = new StringWriter() };
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+        XmlParser.Parse(stream, ref handler, options);
         return NormalizeNewLines(handler.Writer.ToString()!);
     }
 

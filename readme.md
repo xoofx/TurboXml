@@ -91,7 +91,7 @@ AMD Ryzen 9 7950X, 1 CPU, 32 logical and 16 physical cores
 
 This parser is following the [Extensible Markup Language (XML) 1.0 (Fifth Edition)](https://www.w3.org/TR/xml/) and **should support any XML valid documents**, except for the known limitations described below:
 
-- For simplicity of the implementation, this parser does not support DTD, custom entities and XML directives (`<!DOCTYPE ...>`). If you are looking for this, you should instead use `System.Xml.XmlReader`.
+- By default, this parser rejects DTD and XML directives (`<!DOCTYPE ...>`) and does not support custom entities. Set `XmlParserOptions.IgnoreDtd` to `true` to skip a legal DTD declaration without fetching external resources, processing DTD declarations, or expanding custom entities.
 - Generic processing instructions such as `<?xpacket ...?>` or `<?xml-stylesheet ...?>` trigger `IXmlReadHandler.OnProcessingInstruction`. Its default implementation is empty, so existing handlers continue to ignore them. The `data` callback parameter preserves the raw source after the target, including separating whitespace. Only the XML declaration `<?xml ...?>` triggers `IXmlReadHandler.OnXmlDeclaration`.
 - This parser checks for well formed XML, matching begin and end tags and report an error if they are not matching
 - This parser does not check for duplicated attributes.
