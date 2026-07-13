@@ -23,6 +23,15 @@ public readonly record struct XmlParserOptions(Encoding? Encoding = null)
 
     /// <summary>Force using this encoding when parsing a stream. By default, TurboXml will detect the encoding by following the XML specs.</summary>
     public Encoding? Encoding { get; init; } = Encoding;
+
+    /// <summary>
+    /// Gets whether document type declarations are accepted and ignored.
+    /// </summary>
+    /// <remarks>
+    /// The default value is <see langword="false"/>, which rejects document type declarations. When <see langword="true"/>,
+    /// TurboXml skips the declaration without fetching external resources, processing DTD declarations, or expanding custom entities.
+    /// </remarks>
+    public bool IgnoreDtd { get; init; }
 }
 
 /// <summary>
@@ -45,7 +54,7 @@ public static class XmlParser
         var charProvider = new StreamCharProvider(stream, null);
         try
         {
-            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider);
+            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider, default);
             parser.Parse();
         }
         finally
@@ -68,7 +77,7 @@ public static class XmlParser
         var charProvider = new StreamCharProvider(stream, null);
         try
         {
-            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider);
+            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider, default);
             parser.Parse();
         }
         finally
@@ -90,7 +99,7 @@ public static class XmlParser
         ArgumentNullException.ThrowIfNull(handler);
 
         var charProvider = new StringCharProvider(text);
-        using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider);
+        using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider, default);
         parser.Parse();
     }
 
@@ -106,7 +115,7 @@ public static class XmlParser
         ArgumentNullException.ThrowIfNull(text);
 
         var charProvider = new StringCharProvider(text);
-        using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider);
+        using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider, default);
         parser.Parse();
     }
 
@@ -117,7 +126,8 @@ public static class XmlParser
     /// <param name="stream">The XML stream to parse.</param>
     /// <param name="handler">The handler to use to parse the XML.</param>
     /// <param name="options">The options to use to parse the XML.</param>
-    public static void Parse<TXmlHandler>(Stream stream, TXmlHandler handler, XmlParserOptions options)where TXmlHandler : class, IXmlReadHandler
+    public static void Parse<TXmlHandler>(Stream stream, TXmlHandler handler, XmlParserOptions options)
+        where TXmlHandler : class, IXmlReadHandler
     {
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentNullException.ThrowIfNull(handler);
@@ -125,7 +135,7 @@ public static class XmlParser
         var charProvider = new StreamCharProvider(stream, options.Encoding);
         try
         {
-            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider);
+            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider, options);
             parser.Parse();
         }
         finally
@@ -148,12 +158,47 @@ public static class XmlParser
         var charProvider = new StreamCharProvider(stream, options.Encoding);
         try
         {
-            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider);
+            using var parser = new XmlParserInternal<TXmlHandler, StreamCharProvider>(ref handler, ref charProvider, options);
             parser.Parse();
         }
         finally
         {
             charProvider.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Parses the specified XML string using the specified handler and options.
+    /// </summary>
+    /// <typeparam name="TXmlHandler">The type of the XML handler.</typeparam>
+    /// <param name="text">The XML text to parse.</param>
+    /// <param name="handler">The handler to use to parse the XML.</param>
+    /// <param name="options">The options to use to parse the XML.</param>
+    public static void Parse<TXmlHandler>(string text, TXmlHandler handler, XmlParserOptions options)
+        where TXmlHandler : class, IXmlReadHandler
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(handler);
+
+        var charProvider = new StringCharProvider(text);
+        using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider, options);
+        parser.Parse();
+    }
+
+    /// <summary>
+    /// Parses the specified XML string using the specified handler and options.
+    /// </summary>
+    /// <typeparam name="TXmlHandler">The type of the XML handler.</typeparam>
+    /// <param name="text">The XML text to parse.</param>
+    /// <param name="handler">The handler to use to parse the XML.</param>
+    /// <param name="options">The options to use to parse the XML.</param>
+    public static void Parse<TXmlHandler>(string text, ref TXmlHandler handler, XmlParserOptions options)
+        where TXmlHandler : struct, IXmlReadHandler
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        var charProvider = new StringCharProvider(text);
+        using var parser = new XmlParserInternal<TXmlHandler, StringCharProvider>(ref handler, ref charProvider, options);
+        parser.Parse();
     }
 }
