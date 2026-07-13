@@ -21,7 +21,7 @@ namespace TurboXml.Tests;
 public class XmlCheckDotNetSDKFiles : VerifyBase
 {
     [XmlSdkSource]
-    [DataTestMethod]
+    [TestMethod]
     public void TestValidFiles(string filePath)
     {
         using var stream = File.OpenRead(filePath);

@@ -14,7 +14,7 @@ namespace TurboXml.Tests;
 public class XmlFileTests : VerifyBase
 {
     [XmlTestSource("Valid")]
-    [DataTestMethod]
+    [TestMethod]
     public Task TestValidFiles(string folder, string filePath)
     {
         var xml = File.ReadAllText(filePath, Encoding.UTF8);
@@ -22,7 +22,7 @@ public class XmlFileTests : VerifyBase
     }
 
     [XmlTestSource("Invalid")]
-    [DataTestMethod]
+    [TestMethod]
     public Task TestInvalidFiles(string folder, string filePath)
     {
         var xml = File.ReadAllText(filePath, Encoding.UTF8);
