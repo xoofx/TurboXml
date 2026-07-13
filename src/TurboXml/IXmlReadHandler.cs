@@ -25,6 +25,20 @@ public interface IXmlReadHandler
     }
 
     /// <summary>
+    /// Called when a processing instruction other than an XML declaration has been parsed.
+    /// </summary>
+    /// <param name="target">The processing instruction target.</param>
+    /// <param name="data">The raw source text after <paramref name="target"/> and before <c>?&gt;</c>, including any separating whitespace.</param>
+    /// <param name="line">The line this processing instruction occurred.</param>
+    /// <param name="column">The column this processing instruction occurred.</param>
+    /// <remarks>
+    /// The processing instruction can be reconstructed exactly as <c>&lt;?</c><paramref name="target"/><paramref name="data"/><c>?&gt;</c>.
+    /// </remarks>
+    void OnProcessingInstruction(ReadOnlySpan<char> target, ReadOnlySpan<char> data, int line, int column)
+    {
+    }
+
+    /// <summary>
     /// Called when an open tag is parsed.
     /// </summary>
     /// <param name="name">The name of the tag.</param>
