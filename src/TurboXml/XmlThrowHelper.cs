@@ -44,7 +44,8 @@ internal enum XmlThrow
     InvalidCharacterFoundAfterStandaloneExpectingEqual,
     InvalidCharacterFoundExpectingQuestionGreaterThan,
     InvalidEndOfXMLStream,
-    InvalidCharacterFoundExpectingLowSurrogate
+    InvalidCharacterFoundExpectingLowSurrogate,
+    InvalidProcessingInstructionExpectingWhitespaceOrQuestionGreaterThan
 }
 
 internal static class XmlThrowHelper
@@ -99,6 +100,7 @@ internal static class XmlThrowHelper
             XmlThrow.InvalidCharacterFoundExpectingQuestionGreaterThan => "Invalid character after processing instruction attributes. Expecting ?>",
             XmlThrow.InvalidEndOfXMLStream => "Invalid end of XML stream",
             XmlThrow.InvalidCharacterFoundExpectingLowSurrogate => "Invalid character found. Expecting a low surrogate",
+            XmlThrow.InvalidProcessingInstructionExpectingWhitespaceOrQuestionGreaterThan => "Invalid processing instruction. Expecting whitespace or ?> after the target",
             _ => "Unexpected XML parsing error"
         };
     }

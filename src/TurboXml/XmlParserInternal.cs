@@ -894,10 +894,12 @@ internal ref struct XmlParserInternal
 
         char c = ReadNext();
 
+        var targetStart = _length;
         if (!TryParseName(ref c))
             ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
 
-        var target = GetTextSpan();
+        var targetLength = _length - targetStart;
+        var target = GetTextSpan(targetStart).Slice(0, targetLength);
         if (target.SequenceEqual("xml".AsSpan()))
         {
             if (_xmlParsingBody)
@@ -916,12 +918,26 @@ internal ref struct XmlParserInternal
             ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingXml);
         }
 
-        ClearCharacterBuffer();
-        ParseProcessingInstruction(ref c);
+        ParseProcessingInstruction(targetStart, targetLength, startLine, startColumn, ref c);
     }
 
-    private void ParseProcessingInstruction(ref char c)
+    private void ParseProcessingInstruction(int targetStart, int targetLength, int startLine, int startColumn, ref char c)
     {
+        var dataStart = _length;
+        var hasDataSeparator = XmlChar.IsWhiteSpace(c);
+        if (c == '?')
+        {
+            c = ReadNext();
+            if (c == '>')
+            {
+                _handler.OnProcessingInstruction(GetTextSpan(targetStart).Slice(0, targetLength), ReadOnlySpan<char>.Empty, startLine, startColumn);
+                ClearCharacterBuffer();
+                return;
+            }
+
+            AppendCharacter('?');
+        }
+
         while (true)
         {
         ProcessNextChar:
@@ -931,14 +947,20 @@ internal ref struct XmlParserInternal
                     c = ReadNext();
                     if (c == '>')
                     {
+                        if (!hasDataSeparator)
+                            ThrowInvalidXml(XmlThrow.InvalidProcessingInstructionExpectingWhitespaceOrQuestionGreaterThan);
+
+                        _handler.OnProcessingInstruction(GetTextSpan(targetStart).Slice(0, targetLength), GetTextSpan(dataStart), startLine, startColumn);
                         ClearCharacterBuffer();
                         return;
                     }
 
+                    AppendCharacter('?');
                     goto ProcessNextChar;
                 case '\n':
                     _line++;
                     _column = -1;
+                    AppendCharacter(c);
                     break;
                 case '\r':
                     if (!TryReadNext(out c))
@@ -948,10 +970,13 @@ internal ref struct XmlParserInternal
                     if (c == '\n')
                     {
                         _column = -1;
+                        AppendCharacter('\r');
+                        AppendCharacter(c);
                     }
                     else
                     {
                         _column = 0;
+                        AppendCharacter('\r');
                         goto ProcessNextChar;
                     }
 
@@ -959,12 +984,14 @@ internal ref struct XmlParserInternal
                 default:
                     if (XmlChar.IsChar(c))
                     {
+                        AppendCharacter(c);
                         break;
                     }
 
                     if (char.IsHighSurrogate(c))
                     {
-                        ReadLowSurrogate();
+                        AppendCharacter(c);
+                        AppendCharacter(ReadLowSurrogate());
                         break;
                     }
 

@@ -78,6 +78,71 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestProcessingInstructionDataCanReconstructSource()
+    {
+        const string xml = "<?custom \tdata?\r\nhere?>";
+        var handler = new ProcessingInstructionHandler();
+
+        XmlParser.Parse(xml, handler);
+
+        Assert.HasCount(1, handler.Instructions);
+        var instruction = handler.Instructions[0];
+        Assert.AreEqual("custom", instruction.Target);
+        Assert.AreEqual(" \tdata?\r\nhere", instruction.Data);
+        Assert.AreEqual(xml, $"<?{instruction.Target}{instruction.Data}?>");
+        Assert.AreEqual(0, instruction.Line);
+        Assert.AreEqual(1, instruction.Column);
+    }
+
+    [TestMethod]
+    public void TestProcessingInstructionWithoutDataIsReported()
+    {
+        var handler = new ProcessingInstructionHandler();
+
+        XmlParser.Parse("<?before?>", handler);
+
+        Assert.HasCount(1, handler.Instructions);
+        Assert.AreEqual("before", handler.Instructions[0].Target);
+        Assert.AreEqual(string.Empty, handler.Instructions[0].Data);
+    }
+
+    [TestMethod]
+    public void TestProcessingInstructionInsideElementIsReported()
+    {
+        var handler = new ProcessingInstructionHandler();
+
+        XmlParser.Parse("""<root><?custom keep="data"?><child /></root>""", handler);
+
+        CollectionAssert.AreEqual(new[] { "root", "child" }, handler.BeginTags);
+        Assert.HasCount(1, handler.Instructions);
+        Assert.AreEqual("custom", handler.Instructions[0].Target);
+        Assert.AreEqual(" keep=\"data\"", handler.Instructions[0].Data);
+    }
+
+    [TestMethod]
+    public void TestMalformedProcessingInstructionIsRejected()
+    {
+        var result = ParseEvents("<root><?custom!?></root>");
+        var expecting = """
+                        BeginTag(root)
+                        Error(Invalid processing instruction. Expecting whitespace or ?> after the target)
+                        """;
+
+        Assert.AreEqual(NormalizeNewLines(expecting), result);
+    }
+
+    [TestMethod]
+    public void TestXmlDeclarationDoesNotReportProcessingInstruction()
+    {
+        var handler = new ProcessingInstructionHandler();
+
+        XmlParser.Parse("""<?xml version="1.0"?><root/>""", handler);
+
+        Assert.AreEqual(1, handler.XmlDeclarationCount);
+        Assert.IsEmpty(handler.Instructions);
+    }
+
+    [TestMethod]
     public void TestXmlDeclarationMustRemainFirstAfterProcessingInstruction()
     {
         var xml = """<?xpacket begin="id"?><?xml version="1.0"?><root/>""";
@@ -408,4 +473,24 @@ public class XmlRuntimeTests
         public void OnError(string message, int line, int column)
             => Writer.WriteLine($"Error({message})");
     }
+
+    private sealed class ProcessingInstructionHandler : IXmlReadHandler
+    {
+        public List<ProcessingInstruction> Instructions { get; } = [];
+
+        public List<string> BeginTags { get; } = [];
+
+        public int XmlDeclarationCount { get; private set; }
+
+        public void OnXmlDeclaration(ReadOnlySpan<char> version, ReadOnlySpan<char> encoding, ReadOnlySpan<char> standalone, int line, int column)
+            => XmlDeclarationCount++;
+
+        public void OnProcessingInstruction(ReadOnlySpan<char> target, ReadOnlySpan<char> data, int line, int column)
+            => Instructions.Add(new ProcessingInstruction(target.ToString(), data.ToString(), line, column));
+
+        public void OnBeginTag(ReadOnlySpan<char> name, int line, int column)
+            => BeginTags.Add(name.ToString());
+    }
+
+    private readonly record struct ProcessingInstruction(string Target, string Data, int Line, int Column);
 }
