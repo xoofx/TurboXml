@@ -10,6 +10,9 @@ namespace TurboXml;
 /// <summary>
 /// Interface to handle events from the XML parser.
 /// </summary>
+/// <remarks>
+/// Lines and columns are zero-based. A column counts Unicode code points, so a surrogate pair is one column.
+/// </remarks>
 public interface IXmlReadHandler
 {
     /// <summary>

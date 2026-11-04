@@ -396,6 +396,31 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestColumnAfterLongEndTag()
+    {
+        // A name of 40 characters goes through the vectorized end tag comparison
+        var name = new string('n', 40);
+        var xml = $"<a><{name}></{name}><b/></a>";
+        var expecting = $"""
+                         BeginTag(1:2): a
+                         BeginTag(1:5): {name}
+                         EndTag(1:48): {name}
+                         BeginTag(1:90): b
+                         EndTagEmpty
+                         EndTag(1:95): a
+                         """;
+        expecting = NormalizeNewLines(expecting);
+
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!));
+
+        handler.Writer = new StringWriter();
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+        Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
     public void TestInvalidCharacterInContent()
     {
         var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
@@ -473,6 +498,77 @@ public class XmlRuntimeTests
                         """;
         expecting = NormalizeNewLines(expecting);
         Assert.AreEqual(expecting, result);
+    }
+
+    [TestMethod]
+    public void TestColumnCountsSurrogatePairAsOneColumn()
+    {
+        // 𝄞 (U+1D11E) and 𐀀 (U+10000) are each one surrogate pair
+        var xml = "<a>𝄞<b c=\"𝄞\" d=\"\"/><!--𝄞--><![CDATA[𝄞]]><𐀀></𐀀><e/></a>";
+        var expecting = """
+                        BeginTag(1:2): a
+                        Content(1:4): 𝄞
+                        BeginTag(1:6): b
+                        Attribute(1:8)-(1:10): c="𝄞"
+                        Attribute(1:14)-(1:16): d=""
+                        EndTagEmpty
+                        Comment(1:24): 𝄞
+                        CData(1:37): 𝄞
+                        BeginTag(1:42): 𐀀
+                        EndTag(1:46): 𐀀
+                        BeginTag(1:49): e
+                        EndTagEmpty
+                        EndTag(1:54): a
+                        """;
+        expecting = NormalizeNewLines(expecting);
+
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!));
+
+        handler.Writer = new StringWriter();
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+        Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
+    public void TestColumnAfterEndTagWithSurrogatePair()
+    {
+        // Names of 16 or more characters go through the vectorized end tag comparison
+        foreach (var name in new[] { "𐀀", new string('n', 15) + "𐀀", "𐀀" + new string('n', 30), new string('n', 20) + "𐀀" + new string('n', 20) })
+        {
+            var xml = $"<a><{name}></{name}><b/></a>";
+            var nameColumns = name.EnumerateRunes().Count();
+            var expecting = $"""
+                             BeginTag(1:2): a
+                             BeginTag(1:5): {name}
+                             EndTag(1:{8 + nameColumns}): {name}
+                             BeginTag(1:{10 + 2 * nameColumns}): b
+                             EndTagEmpty
+                             EndTag(1:{15 + 2 * nameColumns}): a
+                             """;
+            expecting = NormalizeNewLines(expecting);
+
+            var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+            XmlParser.Parse(xml, ref handler);
+            Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!), name);
+
+            handler.Writer = new StringWriter();
+            XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+            Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!), name);
+        }
+    }
+
+    [TestMethod]
+    public void TestEndOfStreamInEndTagWithSurrogatePair()
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse("<a𝄞b></a𝄞", ref handler);
+        var expecting = """
+                        BeginTag(1:2): a𝄞b
+                        Error(1:10): Invalid end of XML stream
+                        """;
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
     }
 
     [TestMethod]

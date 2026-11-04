@@ -6,6 +6,7 @@ using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -677,6 +678,9 @@ internal ref struct XmlParserInternal
                     XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidEndTagName, line, column);
 
                 _stream.Advance(Vector256<ushort>.Count);
+                // A surrogate pair counts as one column
+                var lowSurrogates = Vector256.Equals(data & Vector256.Create((ushort)0xFC00), Vector256.Create((ushort)0xDC00));
+                _column += Vector256<ushort>.Count - BitOperations.PopCount(lowSurrogates.ExtractMostSignificantBits());
                 i += Vector256<ushort>.Count;
                 length -= Vector256<ushort>.Count;
             }
@@ -688,6 +692,10 @@ internal ref struct XmlParserInternal
             c = ReadNext();
             if (c != Unsafe.Add(ref nameStart, i))
                 XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidEndTagName, line, column);
+
+            // A surrogate pair counts as one column
+            if (char.IsLowSurrogate(c))
+                _column--;
         }
 
         c = ReadNext();
