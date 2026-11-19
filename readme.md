@@ -95,6 +95,7 @@ This parser is following the [Extensible Markup Language (XML) 1.0 (Fifth Editio
 - By default, this parser rejects DTD and XML directives (`<!DOCTYPE ...>`) and does not support custom entities. Set `XmlParserOptions.IgnoreDtd` to `true` to skip a legal DTD declaration without fetching external resources, processing DTD declarations, or expanding custom entities.
 - Generic processing instructions such as `<?xpacket ...?>` or `<?xml-stylesheet ...?>` trigger `IXmlReadHandler.OnProcessingInstruction`. Its default implementation is empty, so existing handlers continue to ignore them. The `data` callback parameter preserves the raw source after the target, including separating whitespace. Only the XML declaration `<?xml ...?>` triggers `IXmlReadHandler.OnXmlDeclaration`.
 - This parser checks for well formed XML, matching begin and end tags and report an error if they are not matching
+- By default, this parser accepts XML fragments: no root element, more than one root element, or text outside the root element. Set `XmlParserOptions.RejectFragments` to `true` to report an error for them.
 - This parser does not check for duplicated attributes.
   - It is the responsibility of the XML handler to implement such a check. The rationale is that the check can be performed more efficiently depending on user scenarios (e.g bit flags...etc.)
 

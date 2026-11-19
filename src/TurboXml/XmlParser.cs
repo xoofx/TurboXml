@@ -32,6 +32,16 @@ public readonly record struct XmlParserOptions(Encoding? Encoding = null)
     /// TurboXml skips the declaration without fetching external resources, processing DTD declarations, or expanding custom entities.
     /// </remarks>
     public bool IgnoreDtd { get; init; }
+
+    /// <summary>
+    /// Gets whether XML fragments are rejected.
+    /// </summary>
+    /// <remarks>
+    /// The default value is <see langword="false"/>, which accepts XML fragments: no root element, more than one root element,
+    /// or character data outside the root element. When <see langword="true"/>, TurboXml reports an error for each of them,
+    /// as the production <c>document</c> of the XML specification requires. Whitespace outside the root element is still reported as text.
+    /// </remarks>
+    public bool RejectFragments { get; init; }
 }
 
 /// <summary>
