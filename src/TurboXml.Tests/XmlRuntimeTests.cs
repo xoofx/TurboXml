@@ -572,6 +572,19 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestEndOfStreamAfterCarriageReturn()
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse("<a>x\r", ref handler);
+        var expecting = """
+                        BeginTag(1:2): a
+                        Content(1:4): x\r
+                        Error(2:1): Invalid tag a not closed at the end of the document.
+                        """;
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
     public void TestDefaultError()
     {
         var handler = new EmptyReadHandler();

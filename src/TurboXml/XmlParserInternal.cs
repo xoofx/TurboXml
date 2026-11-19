@@ -163,13 +163,14 @@ internal ref struct XmlParserInternal
                 case '\r':
                     _xmlParsingBody = true;
                     AppendCharacter(c);
+                    _line++;
+                    _column = -1;
 
                     if (!TryReadNext(out c))
                     {
-                        return;
+                        goto EndOfStream;
                     }
 
-                    _line++;
                     if (c == '\n')
                     {
                         _column = -1;
@@ -177,7 +178,6 @@ internal ref struct XmlParserInternal
                     }
                     else
                     {
-                        _column = 0;
                         goto ProcessNextChar;
                     }
 
@@ -211,6 +211,7 @@ internal ref struct XmlParserInternal
             }
         }
 
+    EndOfStream:
         FlushCharacterBuffer();
 
         // Flush any errors of opened tags
