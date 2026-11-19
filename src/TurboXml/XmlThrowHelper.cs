@@ -46,7 +46,10 @@ internal enum XmlThrow
     InvalidEndOfXMLStream,
     InvalidCharacterFoundExpectingLowSurrogate,
     InvalidProcessingInstructionExpectingWhitespaceOrQuestionGreaterThan,
-    InvalidDocumentTypeDeclaration
+    InvalidDocumentTypeDeclaration,
+    InvalidSecondRootElement,
+    InvalidTextOutsideRootElement,
+    InvalidMissingRootElement
 }
 
 internal static class XmlThrowHelper
@@ -103,6 +106,9 @@ internal static class XmlThrowHelper
             XmlThrow.InvalidCharacterFoundExpectingLowSurrogate => "Invalid character found. Expecting a low surrogate",
             XmlThrow.InvalidProcessingInstructionExpectingWhitespaceOrQuestionGreaterThan => "Invalid processing instruction. Expecting whitespace or ?> after the target",
             XmlThrow.InvalidDocumentTypeDeclaration => "Invalid document type declaration",
+            XmlThrow.InvalidSecondRootElement => "Invalid begin tag. A document has only one root element",
+            XmlThrow.InvalidTextOutsideRootElement => "Invalid text outside the root element. Only whitespace is allowed",
+            XmlThrow.InvalidMissingRootElement => "Invalid document. Expecting a root element",
             _ => "Unexpected XML parsing error"
         };
     }

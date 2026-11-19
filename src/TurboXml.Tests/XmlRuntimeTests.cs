@@ -572,6 +572,105 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestRejectFragments()
+    {
+        var options = new XmlParserOptions { RejectFragments = true };
+        var cases = new (string Xml, string Expecting)[]
+        {
+            ("<a/><b/>", """
+                         BeginTag(1:2): a
+                         EndTagEmpty
+                         Error(1:6): Invalid begin tag. A document has only one root element
+                         """),
+            ("", "Error(1:1): Invalid document. Expecting a root element"),
+            ("<!-- c --> \n", """
+                             Comment(1:5):  c 
+                             Content(1:11):  \n
+                             Error(2:1): Invalid document. Expecting a root element
+                             """),
+            ("\r", """
+                    Content(1:1): \r
+                    Error(2:1): Invalid document. Expecting a root element
+                    """),
+            ("x<a/>", "Error(1:1): Invalid text outside the root element. Only whitespace is allowed"),
+            ("<a/> x", """
+                       BeginTag(1:2): a
+                       EndTagEmpty
+                       Error(1:5): Invalid text outside the root element. Only whitespace is allowed
+                       """),
+            ("<a/>x\r", """
+                       BeginTag(1:2): a
+                       EndTagEmpty
+                       Error(1:5): Invalid text outside the root element. Only whitespace is allowed
+                       """),
+            ("<a/>&#32;", """
+                          BeginTag(1:2): a
+                          EndTagEmpty
+                          Error(1:5): Invalid text outside the root element. Only whitespace is allowed
+                          """),
+            ("<a/><![CDATA[x]]>", """
+                                  BeginTag(1:2): a
+                                  EndTagEmpty
+                                  Error(1:7): Invalid text outside the root element. Only whitespace is allowed
+                                  """),
+            ("<?xml version=\"1.0\"?>\n<!-- c --><a><b/>x<![CDATA[y]]>&amp;</a>\n<!-- d --><?pi?>\n", """
+                                                                                                XmlDeclaration(1:2): version="1.0" encoding="" standalone=""
+                                                                                                Content(1:22): \n
+                                                                                                Comment(2:5):  c 
+                                                                                                BeginTag(2:12): a
+                                                                                                BeginTag(2:15): b
+                                                                                                EndTagEmpty
+                                                                                                Content(2:18): x
+                                                                                                CData(2:28): y
+                                                                                                Content(2:32): &
+                                                                                                EndTag(2:39): a
+                                                                                                Content(2:41): \n
+                                                                                                Comment(3:5):  d 
+                                                                                                Content(3:17): \n
+                                                                                                """),
+        };
+
+        foreach (var (xml, expecting) in cases)
+        {
+            var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+            XmlParser.Parse(xml, ref handler, options);
+            Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!), xml);
+
+            handler.Writer = new StringWriter();
+            XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler, options);
+            Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!), xml);
+        }
+    }
+
+    [TestMethod]
+    public void TestFragmentsAreAcceptedByDefault()
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse("x<a/><b/>", ref handler);
+        var expecting = """
+                        Content(1:1): x
+                        BeginTag(1:3): a
+                        EndTagEmpty
+                        BeginTag(1:7): b
+                        EndTagEmpty
+                        """;
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
+    public void TestEndOfStreamAfterCarriageReturn()
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse("<a>x\r", ref handler);
+        var expecting = """
+                        BeginTag(1:2): a
+                        Content(1:4): x\r
+                        Error(2:1): Invalid tag a not closed at the end of the document.
+                        """;
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
     public void TestDefaultError()
     {
         var handler = new EmptyReadHandler();
