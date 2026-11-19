@@ -23,6 +23,16 @@ internal struct StringCharProvider : ICharProvider
         _text = text;
     }
 
+    /// <summary>
+    /// Gets the input text.
+    /// </summary>
+    public string Text => _text;
+
+    /// <summary>
+    /// Gets the position of the next character to read.
+    /// </summary>
+    public nint Index => _index;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryReadNext(out char c)
     {

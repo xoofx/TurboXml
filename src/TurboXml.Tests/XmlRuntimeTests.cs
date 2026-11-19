@@ -641,6 +641,118 @@ public class XmlRuntimeTests
         }
     }
 
+    [TestMethod]
+    public void TestStringInputContentPointsIntoInput()
+    {
+        var longText = new string('t', 100);
+        var xml = $"<?pi data?><!-- comment --><root a=\"{longText}\" b='value'>{longText}<![CDATA[ cdata ]]></root>end";
+        var handler = new ContentSpanHandler(xml);
+        XmlParser.Parse(xml, handler);
+
+        AssertEvents(new[]
+        {
+            "PI(pi): data:input",
+            "Comment: comment :input",
+            $"Attribute(a):{longText}:input",
+            "Attribute(b):value:input",
+            $"Text:{longText}:input",
+            "CData: cdata :input",
+            "Text:end:input",
+        }, handler.Events);
+    }
+
+    [TestMethod]
+    [DataRow("<root>a&amp;b</root>", "Text:a&b:copy")]
+    [DataRow("<root>&amp;ab</root>", "Text:&ab:copy")]
+    // The decoded character is the same as the first character of the entity, and the content ends there.
+    [DataRow("<root>ab&amp;</root>", "Text:ab&:input")]
+    [DataRow("<root>ab&#x41;</root>", "Text:abA:copy")]
+    [DataRow("<root>ab&#x1F600;cd</root>", "Text:ab\U0001F600cd:copy")]
+    [DataRow("<root/>a&lt;b", "Text:a<b:copy")]
+    [DataRow("<root a=\"x&quot;y\"/>", "Attribute(a):x\"y:copy")]
+    [DataRow("<root a=\"x\r\ny\"/>", "Attribute(a):x\ny:copy")]
+    [DataRow("<root a=\"\"/>", "Attribute(a)::input")]
+    [DataRow("<root><![CDATA[a]]b]c]]></root>", "CData:a]]b]c:input")]
+    [DataRow("<root><![CDATA[]]></root>", "CData::input")]
+    [DataRow("<!--a-b-c--><root/>", "Comment:a-b-c:input")]
+    [DataRow("<!----><root/>", "Comment::input")]
+    [DataRow("<?pi a?b??><root/>", "PI(pi): a?b?:input")]
+    [DataRow("<root>\U0001F600</root>", "Text:\U0001F600:input")]
+    public void TestStringInputContentChangesToCopy(string xml, string expected)
+    {
+        var handler = new ContentSpanHandler(xml);
+        XmlParser.Parse(xml, handler);
+        AssertEvents(new[] { expected }, handler.Events);
+        AssertSameContentAsStream(xml, handler);
+    }
+
+    [TestMethod]
+    public void TestStringInputLongContentWithEntityAfterVectors()
+    {
+        // The entity comes after a run of characters that the parser reads in vectors.
+        foreach (var length in new[] { 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 200 })
+        {
+            var run = new string('x', length);
+            var xml = $"<root a=\"{run}&amp;{run}\">{run}&amp;{run}<![CDATA[{run}]]{run}]]><!--{run}-{run}--></root>{run}&amp;";
+            var handler = new ContentSpanHandler(xml);
+            XmlParser.Parse(xml, handler);
+            AssertEvents(new[]
+            {
+                $"Attribute(a):{run}&{run}:copy",
+                $"Text:{run}&{run}:copy",
+                $"CData:{run}]]{run}:input",
+                $"Comment:{run}-{run}:input",
+                $"Text:{run}&:input",
+            }, handler.Events, $"Length {length}");
+            AssertSameContentAsStream(xml, handler);
+        }
+    }
+
+    private static void AssertSameContentAsStream(string xml, ContentSpanHandler stringHandler)
+    {
+        var streamHandler = new ContentSpanHandler(xml);
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), streamHandler);
+        AssertEvents(stringHandler.Values, streamHandler.Values);
+    }
+
+    private static void AssertEvents(IEnumerable<string> expected, IEnumerable<string> actual, string? message = null)
+        => Assert.AreEqual(string.Join("\n", expected), string.Join("\n", actual), message);
+
+    /// <summary>
+    /// Records the content that the parser gives, and if the span points into the input string.
+    /// </summary>
+    private sealed class ContentSpanHandler(string input) : IXmlReadHandler
+    {
+        public List<string> Events { get; } = [];
+
+        public List<string> Values { get; } = [];
+
+        public void OnProcessingInstruction(ReadOnlySpan<char> target, ReadOnlySpan<char> data, int line, int column)
+            => Add($"PI({target})", data);
+
+        public void OnAttribute(ReadOnlySpan<char> name, ReadOnlySpan<char> value, int nameLine, int nameColumn, int valueLine, int valueColumn)
+            => Add($"Attribute({name})", value);
+
+        public void OnText(ReadOnlySpan<char> text, int line, int column)
+            => Add("Text", text);
+
+        public void OnComment(ReadOnlySpan<char> comment, int line, int column)
+            => Add("Comment", comment);
+
+        public void OnCData(ReadOnlySpan<char> cdata, int line, int column)
+            => Add("CData", cdata);
+
+        public void OnError(string message, int line, int column)
+            => Events.Add($"Error:{message}");
+
+        private void Add(string kind, ReadOnlySpan<char> content)
+        {
+            var source = content.IsEmpty || content.Overlaps(input.AsSpan()) ? "input" : "copy";
+            Events.Add($"{kind}:{content}:{source}");
+            Values.Add($"{kind}:{content}");
+        }
+    }
+
     private struct XmlEventHandler : IXmlReadHandler
     {
         public required TextWriter Writer { get; init; }
