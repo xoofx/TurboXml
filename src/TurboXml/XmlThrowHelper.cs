@@ -49,7 +49,8 @@ internal enum XmlThrow
     InvalidDocumentTypeDeclaration,
     InvalidSecondRootElement,
     InvalidTextOutsideRootElement,
-    InvalidMissingRootElement
+    InvalidMissingRootElement,
+    InvalidCDATAEndInText
 }
 
 internal static class XmlThrowHelper
@@ -109,6 +110,7 @@ internal static class XmlThrowHelper
             XmlThrow.InvalidSecondRootElement => "Invalid begin tag. A document has only one root element",
             XmlThrow.InvalidTextOutsideRootElement => "Invalid text outside the root element. Only whitespace is allowed",
             XmlThrow.InvalidMissingRootElement => "Invalid document. Expecting a root element",
+            XmlThrow.InvalidCDATAEndInText => "Invalid character sequence ]]> outside a CDATA section",
             _ => "Unexpected XML parsing error"
         };
     }

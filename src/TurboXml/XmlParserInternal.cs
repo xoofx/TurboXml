@@ -87,6 +87,7 @@ internal ref struct XmlParserInternal
                     test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)XmlChar.HIGH_SURROGATE_START));
                     test |= Vector128.Equals(data, Vector128.Create((ushort)'&'));
                     test |= Vector128.Equals(data, Vector128.Create((ushort)'<'));
+                    test |= Vector128.Equals(data, Vector128.Create((ushort)']'));
                     if (test != Vector128<ushort>.Zero)
                     {
                         break;
@@ -162,6 +163,38 @@ internal ref struct XmlParserInternal
                     _isInProlog = false;
                     ParseEntity(ref c);
                     break;
+
+                case ']':
+                    // [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
+                    _xmlParsingBody = true;
+                    _isInProlog = false;
+                    AppendCharacter(c);
+
+                    if (!TryReadNext(out c))
+                    {
+                        goto EndOfStream;
+                    }
+
+                    if (c != ']')
+                    {
+                        goto ProcessNextChar;
+                    }
+
+                    do
+                    {
+                        AppendCharacter(c);
+                        if (!TryReadNext(out c))
+                        {
+                            goto EndOfStream;
+                        }
+                    } while (c == ']');
+
+                    if (c == '>')
+                    {
+                        XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCDATAEndInText, _line, _column - 2);
+                    }
+
+                    goto ProcessNextChar;
 
                 case '\n':
                     _xmlParsingBody = true;
