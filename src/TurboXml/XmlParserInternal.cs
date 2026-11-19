@@ -491,6 +491,8 @@ internal ref struct XmlParserInternal
         }
     }
 
+    private const int MaxCodePoint = 0x10FFFF;
+
     private void ParseEntity(ref char c)
     {
         // Parse EntityName
@@ -515,6 +517,8 @@ internal ref struct XmlParserInternal
                     if (XmlChar.TryGetHexDigit(c, out int newValue))
                     {
                         charCodePoint = (charCodePoint << 4) + newValue;
+                        if (charCodePoint > MaxCodePoint)
+                            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
                     }
                     else
                     {
@@ -534,6 +538,8 @@ internal ref struct XmlParserInternal
                     if ((uint)d <= 9)
                     {
                         charCodePoint = charCodePoint * 10 + d;
+                        if (charCodePoint > MaxCodePoint)
+                            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
                     }
                     else
                     {
@@ -549,6 +555,10 @@ internal ref struct XmlParserInternal
 
             if (c != ';')
                 ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingSemiComma);
+
+            // [WFC: Legal Character] Characters referred to using character references MUST match the production for Char.
+            if (charCodePoint <= char.MaxValue && !XmlChar.IsChar((char)charCodePoint))
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
             return;
         }
 
