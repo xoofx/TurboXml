@@ -52,10 +52,10 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         _text = ArrayPool<char>.Shared.Rent(encoding.GetMaxCharCount(_buffer.Length));
     }
 
-    public bool TryReadNext(out char c)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryReadNext(ref char c)
     {
         var index = _index;
-        Unsafe.SkipInit(out c);
         if (index >= _length)
         {
             FillBuffer();
@@ -68,7 +68,7 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
             }
         }
 
-        c = Unsafe.Add(ref MemoryMarshal.GetReference(_text.AsSpan()), index);
+        c = _text[index];
         _index = index + 1;
         return true;
     }
@@ -122,7 +122,7 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
             return true;
         }
 
-        Unsafe.SkipInit(out data);
+        data = default;
         return false;
     }
 
@@ -142,7 +142,7 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
             return true;
         }
 
-        Unsafe.SkipInit(out data);
+        data = default;
         return false;
     }
 

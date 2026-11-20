@@ -14,9 +14,9 @@ internal interface ICharProvider
     /// <summary>
     /// Tries to read the next character from the input.
     /// </summary>
-    /// <param name="c">The character read if true is returned.</param>
+    /// <param name="c">The character read if true is returned. At the end of the input, <paramref name="c"/> does not change.</param>
     /// <returns><c>true</c> if a character was successfully read; otherwise <c>false</c></returns>
-    bool TryReadNext(out char c);
+    bool TryReadNext(ref char c);
 
     /// <summary>
     /// Tries to read a batch of 8 characters from the input.

@@ -34,7 +34,7 @@ internal static partial class XmlChar
     private const char LOW_SURROGATE_END = '\udfff';
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static XmlCharCategory GetCharCategory(char ch) => (XmlCharCategory)Unsafe.Add(ref MemoryMarshal.GetReference(CharCategories), (int)ch);
+    public static XmlCharCategory GetCharCategory(char ch) => (XmlCharCategory)CharCategories[ch];
     
     /// <summary>
     /// Is a valid XML character
