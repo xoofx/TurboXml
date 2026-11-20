@@ -40,7 +40,7 @@ internal ref struct XmlParserInternal
     private int _lastNameStackIndex;
 
     // For a string input, the content in progress is the slice of the input at _sliceStart, until a character differs from the input.
-    private nint _sliceStart;
+    private int _sliceStart;
     private int _sliceLength;
 
     public XmlParserInternal(ref THandler handler, ref TCharProvider stream, XmlParserOptions options)
@@ -1655,10 +1655,10 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void StartContent(int charsBack = 0)
     {
-        if (typeof(TCharProvider) == typeof(StringCharProvider))
+        if (_stream.TryGetText(out _, out var index))
         {
             Debug.Assert(_length == _lastNameStackIndex || _sliceStart < 0);
-            _sliceStart = Unsafe.As<TCharProvider, StringCharProvider>(ref _stream).Index - charsBack;
+            _sliceStart = index - charsBack;
             _sliceLength = 0;
         }
     }
@@ -1666,17 +1666,16 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendContent(char c)
     {
-        if (typeof(TCharProvider) == typeof(StringCharProvider) && _sliceStart >= 0)
+        if (_stream.TryGetText(out var text, out _) && _sliceStart >= 0)
         {
-            var text = Unsafe.As<TCharProvider, StringCharProvider>(ref _stream).Text;
             var next = _sliceStart + _sliceLength;
-            if ((nuint)next < (nuint)text.Length && Unsafe.Add(ref MemoryMarshal.GetReference(text.AsSpan()), next) == c)
+            if ((uint)next < (uint)text.Length && text[next] == c)
             {
                 _sliceLength++;
                 return;
             }
 
-            CopySlice();
+            CopySlice(text);
         }
 
         AppendCharacter(c);
@@ -1686,15 +1685,15 @@ internal ref struct XmlParserInternal
     private void AppendContent(Vector128<ushort> data)
     {
         // The data is the input at the current position, so it extends the slice when the slice ends there.
-        if (typeof(TCharProvider) == typeof(StringCharProvider) && _sliceStart >= 0)
+        if (_stream.TryGetText(out var text, out var index) && _sliceStart >= 0)
         {
-            if (_sliceStart + _sliceLength == Unsafe.As<TCharProvider, StringCharProvider>(ref _stream).Index)
+            if (_sliceStart + _sliceLength == index)
             {
                 _sliceLength += Vector128<ushort>.Count;
                 return;
             }
 
-            CopySlice();
+            CopySlice(text);
         }
 
         AppendCharacters(data);
@@ -1703,24 +1702,24 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendContent(Vector256<ushort> data)
     {
-        if (typeof(TCharProvider) == typeof(StringCharProvider) && _sliceStart >= 0)
+        if (_stream.TryGetText(out var text, out var index) && _sliceStart >= 0)
         {
-            if (_sliceStart + _sliceLength == Unsafe.As<TCharProvider, StringCharProvider>(ref _stream).Index)
+            if (_sliceStart + _sliceLength == index)
             {
                 _sliceLength += Vector256<ushort>.Count;
                 return;
             }
 
-            CopySlice();
+            CopySlice(text);
         }
 
         AppendCharacters(data);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void CopySlice()
+    private void CopySlice(string text)
     {
-        var slice = Unsafe.As<TCharProvider, StringCharProvider>(ref _stream).Text.AsSpan((int)_sliceStart, _sliceLength);
+        var slice = text.AsSpan(_sliceStart, _sliceLength);
         _sliceStart = -1;
         if (_length + slice.Length > _buffer.Length)
         {
@@ -1737,10 +1736,10 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ReadOnlySpan<char> GetContentSpan(int index)
     {
-        if (typeof(TCharProvider) == typeof(StringCharProvider) && _sliceStart >= 0)
+        if (_stream.TryGetText(out var text, out _) && _sliceStart >= 0)
         {
             Debug.Assert(_length == index);
-            var span = Unsafe.As<TCharProvider, StringCharProvider>(ref _stream).Text.AsSpan((int)_sliceStart, _sliceLength);
+            var span = text.AsSpan(_sliceStart, _sliceLength);
             _sliceStart = -1;
             return span;
         }

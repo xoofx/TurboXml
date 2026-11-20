@@ -3,6 +3,7 @@
 // See license.txt file in the project root for full license information.
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -22,16 +23,6 @@ internal struct StringCharProvider : ICharProvider
     {
         _text = text;
     }
-
-    /// <summary>
-    /// Gets the input text.
-    /// </summary>
-    public string Text => _text;
-
-    /// <summary>
-    /// Gets the position of the next character to read.
-    /// </summary>
-    public nint Index => _index;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryReadNext(out char c)
@@ -82,5 +73,13 @@ internal struct StringCharProvider : ICharProvider
     public void Advance(int countChars)
     {
         _index += countChars;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetText([NotNullWhen(true)] out string? text, out int index)
+    {
+        text = _text;
+        index = (int)_index;
+        return true;
     }
 }
