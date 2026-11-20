@@ -1581,8 +1581,8 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendCharacters(Vector128<ushort> span)
     {
-        var charBufferLength = _length;
         var charBuffer = _buffer;
+        var charBufferLength = _length;
         if (charBufferLength + Vector128<ushort>.Count > charBuffer.Length)
         {
             Resize(Vector128<ushort>.Count);
@@ -1596,8 +1596,8 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendCharacters(Vector256<ushort> span)
     {
-        var charBufferLength = _length;
         var charBuffer = _buffer;
+        var charBufferLength = _length;
         if (charBufferLength + Vector256<ushort>.Count > charBuffer.Length)
         {
             Resize(Vector256<ushort>.Count);
