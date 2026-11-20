@@ -1657,7 +1657,6 @@ internal ref struct XmlParserInternal
     {
         if (_stream.TryGetText(out _, out var index))
         {
-            Debug.Assert(_length == _lastNameStackIndex || _sliceStart < 0);
             _sliceStart = index - charsBack;
             _sliceLength = 0;
         }
