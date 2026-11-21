@@ -172,7 +172,8 @@ internal ref struct XmlParserInternal
 
                 case '\r':
                     _xmlParsingBody = true;
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendCharacter('\n');
                     _line++;
                     _column = -1;
 
@@ -184,7 +185,6 @@ internal ref struct XmlParserInternal
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
@@ -1161,14 +1161,14 @@ internal ref struct XmlParserInternal
                     AppendCharacter(c);
                     break;
                 case '\r':
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendCharacter('\n');
                     c = ReadNext();
 
                     _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
@@ -1259,14 +1259,14 @@ internal ref struct XmlParserInternal
                     break;
 
                 case '\r':
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendCharacter('\n');
                     c = ReadNext();
 
                     _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
