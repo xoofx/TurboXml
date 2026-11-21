@@ -4,6 +4,7 @@
 
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -150,6 +151,14 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
     public void Advance(int countChars)
     {
         _index += countChars;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetText([NotNullWhen(true)] out string? text, out int index)
+    {
+        text = null;
+        index = 0;
+        return false;
     }
 
     public void Dispose()
