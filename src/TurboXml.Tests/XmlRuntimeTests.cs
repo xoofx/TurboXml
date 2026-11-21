@@ -712,6 +712,28 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestClosingBracketsInsideText()
+    {
+        var xml = "<a>x]y]]z]</a><b>]</b>";
+        var expecting = """
+                        BeginTag(1:2): a
+                        Content(1:4): x]y]]z]
+                        EndTag(1:13): a
+                        BeginTag(1:16): b
+                        Content(1:18): ]
+                        EndTag(1:21): b
+                        """;
+
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+
+        handler.Writer = new StringWriter();
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
     public void TestDefaultError()
     {
         var handler = new EmptyReadHandler();

@@ -175,7 +175,7 @@ internal ref struct XmlParserInternal
                     // [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
                     _xmlParsingBody = true;
                     _isInProlog = false;
-                    AppendCharacter(c);
+                    AppendContent(c);
 
                     if (!TryReadNext(out c))
                     {
@@ -189,7 +189,7 @@ internal ref struct XmlParserInternal
 
                     do
                     {
-                        AppendCharacter(c);
+                        AppendContent(c);
                         if (!TryReadNext(out c))
                         {
                             goto EndOfStream;

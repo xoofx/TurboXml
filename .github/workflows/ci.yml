@@ -1,7 +1,10 @@
 name: ci
 
+# Build and test on every pull request and on every push to main (i.e. after a merge).
+# Publishing is done separately by the manual `publish` workflow.
 on:
   push:
+    branches: [ main ]
     paths-ignore:
     - 'doc/**'
     - 'img/**'
@@ -9,15 +12,41 @@ on:
     - '*.txt'
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
 jobs:
-  build:
-    permissions:
-      id-token: write
-      actions: write
-      contents: write
-    runs-on: 'ubuntu-latest'
+  build-and-test:
+    name: ${{ matrix.os }} / ${{ matrix.configuration }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+        # Debug enables Debug.Assert checks, Release is what gets shipped (unsafe code paths can behave differently).
+        configuration: [ Debug, Release ]
     steps:
-      - name: "Build, Test, Pack and Publish"
-        uses: xoofx/.github/.github/actions/dotnet-releaser-action@main
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          GIST_GITHUB_TOKEN: ${{ secrets.GIST_GITHUB_TOKEN }}
+          global-json-file: src/global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build
+        run: dotnet build src/TurboXml.slnx -c ${{ matrix.configuration }}
+
+      - name: Test
+        run: dotnet test src/TurboXml.slnx -c ${{ matrix.configuration }} --no-build
