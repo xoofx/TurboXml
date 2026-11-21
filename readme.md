@@ -107,6 +107,13 @@ You need to install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotne
 $ dotnet build src -c Release
 ```
 
+## 📦 Publishing to GitHub Packages
+
+The [`publish`](.github/workflows/publish.yml) workflow is triggered manually (Actions → publish → Run workflow). It builds, tests, packs and pushes the package to GitHub Packages, then creates a GitHub release with auto-generated release notes.
+
+- The major and minor version come from `MinVerMinimumMajorMinor` in `src/TurboXml/TurboXml.csproj` (currently `2.1`). Change it to start a new minor/major line.
+- The patch version is automatic: the next number after the latest `v<major>.<minor>.*` tag (starting at `0`).
+
 ## 🪪 License
 
 This software is released under the [BSD-2-Clause license](https://opensource.org/licenses/BSD-2-Clause). 
