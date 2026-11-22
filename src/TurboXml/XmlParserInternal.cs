@@ -1118,6 +1118,14 @@ internal ref struct XmlParserInternal
                     if (c == ']')
                     {
                         c = ReadNext();
+
+                        // [21] CDEnd ::= ']]>' ends the section at the first ]]>, so each extra ] before it is content
+                        while (c == ']')
+                        {
+                            AppendCharacter(']');
+                            c = ReadNext();
+                        }
+
                         if (c == '>')
                         {
                             _handler.OnCData(GetTextSpan(), startLine, startColumn);
