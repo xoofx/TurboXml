@@ -484,7 +484,7 @@ public class XmlRuntimeTests
                         Content(1:39): \n
                         Comment(2:5):  comment\n 
                         BeginTag(3:6): root
-                        Attribute(4:1)-(4:6): attr="hello\nworld"
+                        Attribute(4:1)-(4:6): attr="hello world"
                         Content(5:8): content\n
                         CData(6:10):  \n 
                         EndTag(7:7): root
@@ -501,7 +501,7 @@ public class XmlRuntimeTests
                     Content(1:39): \n
                     Comment(2:5):  comment\n 
                     BeginTag(3:6): root
-                    Attribute(4:1)-(4:6): attr="hello\nworld"
+                    Attribute(4:1)-(4:6): attr="hello world"
                     Content(5:8): content\n
                     CData(6:10):  \n 
                     EndTag(7:7): root
@@ -511,6 +511,26 @@ public class XmlRuntimeTests
 
         static string GetXml(string nl)
             => $"<?xml version=\"1.0\" encoding=\"utf-8\"?>{nl}<!-- comment{nl} --><root{nl}attr=\"hello{nl}world\">content{nl}<![CDATA[ {nl} ]]></root>";
+    }
+
+    [TestMethod]
+    public void TestAttributeValueWhitespaceNormalization()
+    {
+        // XML 1.0 3.3.3: each literal tab, line feed, carriage return or \r\n is passed as a space, a character reference as its character.
+        // 32 characters go through the vectorized attribute value loops before the tab.
+        var block = "0123456789abcdef0123456789abcdef";
+        var xml = $"<a b='x\r\ny\tz\nw&#xD;' c=\"1\r2&#x9;&#xA;&#xD;3\" d=\"{block}\t{block}\"/>";
+        var expecting = NormalizeNewLines(
+            $"""
+             BeginTag(1:2): a
+             Attribute(1:4)-(1:6): b="x y z w\r"
+             Attribute(3:9)-(3:11): c="1 2\t\n\r3"
+             Attribute(4:20)-(4:22): d="{block} {block}"
+             EndTagEmpty
+             """);
+
+        Assert.AreEqual(expecting, ParsePrint(xml));
+        Assert.AreEqual(expecting, ParsePrint(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
     [TestMethod]

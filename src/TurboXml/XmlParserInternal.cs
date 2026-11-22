@@ -448,18 +448,23 @@ internal ref struct XmlParserInternal
                     ThrowInvalidXml(XmlThrow.InvalidCharacterLessThanInAttributeValue);
                     break;
                 case '&':
+                    // A character reference keeps its character, such as &#xD; or &#x9;
                     ParseEntity(ref c);
                     continue;
 
+                // As per the XML spec, \r\n and \r are normalized to \n (2.11),
+                // then each literal whitespace character of an attribute value is passed as a space (3.3.3)
+                case '\t':
+                    AppendCharacter(' ');
+                    break;
                 case '\n':
                     _line++;
                     _column = -1;
 
-                    AppendCharacter(c);
+                    AppendCharacter(' ');
                     break;
                 case '\r':
-                    // As per the XML spec, we need to normalize \r and \r\n to \n
-                    AppendCharacter('\n');
+                    AppendCharacter(' ');
 
                     c = ReadNext();
 

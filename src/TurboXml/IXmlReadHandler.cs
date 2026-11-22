@@ -72,7 +72,7 @@ public interface IXmlReadHandler
     /// Called when an attribute has been parsed.
     /// </summary>
     /// <param name="name">The name of the attribute.</param>
-    /// <param name="value">The value of the attribute.</param>
+    /// <param name="value">The value of the attribute. Each literal tab, line feed, carriage return or carriage return and line feed in it is passed as a space, while a character reference such as <c>&amp;#xD;</c> keeps its character.</param>
     /// <param name="nameLine">The line the name declaration occured.</param>
     /// <param name="nameColumn">The column the name declaration occured.</param>
     /// <param name="valueLine">The line the value declaration occured.</param>
