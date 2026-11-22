@@ -33,23 +33,35 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         _index = 0;
         _bufferOffset = 0;
 
+        var byteOrderMarkLength = 0;
         if (encoding is null)
         {
-            var detectedEncoding = DetectEncodingOrNull(stream, out var offset);
+            var detectedEncoding = DetectEncodingOrNull(stream, out byteOrderMarkLength);
             if (detectedEncoding != null)
             {
                 encoding ??= detectedEncoding;
             }
 
             encoding ??= Encoding.UTF8;
-            if (offset > 0)
+            if (byteOrderMarkLength > 0)
             {
-                _stream.Position += offset;
+                _stream.Position += byteOrderMarkLength;
             }
         }
 
         _decoder = encoding.GetDecoder();
         _text = ArrayPool<char>.Shared.Rent(encoding.GetMaxCharCount(_buffer.Length));
+
+        // When the encoding is given, or the detection did not skip a byte order mark, the decoder passes it as U+FEFF:
+        // it is not part of the document (XML 1.0 appendix F), so skip it.
+        if (byteOrderMarkLength == 0)
+        {
+            FillBuffer();
+            if (_length > 0 && _text[0] == '﻿')
+            {
+                _index = 1;
+            }
+        }
     }
 
     public bool TryReadNext(out char c)

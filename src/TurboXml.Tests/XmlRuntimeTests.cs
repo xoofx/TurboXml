@@ -437,6 +437,41 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestByteOrderMarkWithGivenEncoding()
+    {
+        foreach (var (encoding, encodingName) in new (Encoding, string)[]
+                 {
+                     (new UTF8Encoding(true), "UTF-8"),
+                     (new UTF8Encoding(false), "UTF-8 without preamble"),
+                     (new UnicodeEncoding(false, true), "UTF-16"),
+                     (new UnicodeEncoding(true, false), "UTF-16 be without preamble"),
+                     (new UTF32Encoding(false, true), "UTF-32"),
+                     (new UTF32Encoding(true, false), "UTF-32 be without preamble"),
+                 })
+        {
+            var options = new XmlParserOptions(encoding);
+            var byteOrderMark = encoding.GetBytes("﻿");
+            foreach (var xml in new[] { """<?xml version="1.0"?><a/>""", "<a>x</a>" })
+            {
+                var expecting = ParsePrint(xml);
+                var bytes = encoding.GetBytes(xml);
+                Assert.AreEqual(expecting, ParsePrint(new MemoryStream([.. byteOrderMark, .. bytes]), options), $"{encodingName} with BOM: {xml}");
+                Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream([.. byteOrderMark, .. bytes]), options), $"{encodingName} with BOM, one byte per read: {xml}");
+                Assert.AreEqual(expecting, ParsePrint(new MemoryStream(bytes), options), $"{encodingName} without BOM: {xml}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void TestByteOrderMarkAfterShortDetectionRead()
+    {
+        // The detection of the encoding reads one byte, too few to see the UTF-8 byte order mark
+        var xml = """<?xml version="1.0"?><a/>""";
+        byte[] bytes = [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(xml)];
+        Assert.AreEqual(ParsePrint(xml), ParsePrint(new OneByteReadStream(bytes)));
+    }
+
+    [TestMethod]
     public void TestEndOfLines()
     {
         // Check \r\n
@@ -716,12 +751,12 @@ public class XmlRuntimeTests
         return NormalizeNewLines(handler.Writer.ToString()!);
     }
 
-    private static string ParsePrint(Stream stream)
+    private static string ParsePrint(Stream stream, XmlParserOptions options = default)
     {
         var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
         using (stream)
         {
-            XmlParser.Parse(stream, ref handler);
+            XmlParser.Parse(stream, ref handler, options);
         }
 
         return NormalizeNewLines(handler.Writer.ToString()!);
