@@ -437,6 +437,27 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestStreamEndingWithIncompleteCharacterAndStrictEncoding()
+    {
+        // XML 1.0 4.3.3: an encoding error is fatal, so a strict decoder throws when it is flushed at the end of the stream
+        var options = new XmlParserOptions(new UTF8Encoding(false, true));
+        byte[] bytes = [.. "<a/>"u8, 0xE2, 0x82];
+
+        Assert.Throws<DecoderFallbackException>(() => ParsePrint(new MemoryStream(bytes), options));
+        Assert.Throws<DecoderFallbackException>(() => ParsePrint(new OneByteReadStream(bytes), options));
+    }
+
+    [TestMethod]
+    public void TestStreamReturningOneBytePerReadWithStrictEncoding()
+    {
+        // A read that ends inside a multi-byte character does not flush the decoder, so a strict decoder does not throw
+        var options = new XmlParserOptions(new UTF8Encoding(false, true));
+        var xml = "<a>€𝄞</a>";
+
+        Assert.AreEqual(ParsePrint(xml), ParsePrint(new OneByteReadStream(Encoding.UTF8.GetBytes(xml)), options));
+    }
+
+    [TestMethod]
     public void TestByteOrderMarkWithGivenEncoding()
     {
         foreach (var (encoding, encodingName) in new (Encoding, string)[]
