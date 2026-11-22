@@ -57,7 +57,7 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         if (byteOrderMarkLength == 0)
         {
             FillBuffer();
-            if (_length > 0 && _text[0] == '﻿')
+            if (_length > 0 && _text[0] == '\uFEFF')
             {
                 _index = 1;
             }

@@ -430,7 +430,7 @@ public class XmlRuntimeTests
         // The first two bytes of the three bytes of €
         byte[] bytes = [.. "<a/>"u8, 0xE2, 0x82];
         // The decoder replaces the incomplete character at the end of the stream
-        var expecting = "BeginTag(1:2): a\nEndTagEmpty\nContent(1:5): �";
+        var expecting = "BeginTag(1:2): a\nEndTagEmpty\nContent(1:5): \uFFFD";
 
         Assert.AreEqual(expecting, ParsePrint(new MemoryStream(bytes)));
         Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream(bytes)));
@@ -450,7 +450,7 @@ public class XmlRuntimeTests
                  })
         {
             var options = new XmlParserOptions(encoding);
-            var byteOrderMark = encoding.GetBytes("﻿");
+            var byteOrderMark = encoding.GetBytes("\uFEFF");
             foreach (var xml in new[] { """<?xml version="1.0"?><a/>""", "<a>x</a>" })
             {
                 var expecting = ParsePrint(xml);
