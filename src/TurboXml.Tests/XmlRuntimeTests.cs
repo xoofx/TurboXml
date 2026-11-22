@@ -235,6 +235,50 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestXmlDeclarationAndDocumentTypeAfterText()
+    {
+        // Text of 8 or 16 characters goes through the vectorized text loop
+        foreach (var text in new[] { " ", new string(' ', 8), new string(' ', 16), "a", "abcdefgh", "abcdefghijklmnop" })
+        {
+            var xml = $"""{text}<?xml version="1.0"?><a/>""";
+            var expecting = NormalizeNewLines(
+                $"""
+                 Content({text})
+                 Error(Invalid XML declaration. It must be the first node in the document)
+                 """);
+            Assert.AreEqual(expecting, ParseEvents(xml), xml);
+            Assert.AreEqual(expecting, ParseStreamEvents(xml, new XmlParserOptions()), xml);
+        }
+
+        var options = new XmlParserOptions { IgnoreDtd = true };
+        foreach (var text in new[] { "a", "abcdefgh", "abcdefghijklmnop", "       a" })
+        {
+            var xml = $"{text}<!DOCTYPE a><a/>";
+            var expecting = NormalizeNewLines(
+                $"""
+                 Content({text})
+                 Error(Invalid document type declaration)
+                 """);
+            Assert.AreEqual(expecting, ParseEvents(xml, options), xml);
+            Assert.AreEqual(expecting, ParseStreamEvents(xml, options), xml);
+        }
+
+        // [27] Misc ::= Comment | PI | S, so whitespace may come before the document type declaration
+        foreach (var text in new[] { " ", new string(' ', 8), new string(' ', 16) })
+        {
+            var xml = $"{text}<!DOCTYPE a><a/>";
+            var expecting = NormalizeNewLines(
+                $"""
+                 Content({text})
+                 BeginTag(a)
+                 EndTagEmpty
+                 """);
+            Assert.AreEqual(expecting, ParseEvents(xml, options), xml);
+            Assert.AreEqual(expecting, ParseStreamEvents(xml, options), xml);
+        }
+    }
+
+    [TestMethod]
     public void TestCommonCharSimd()
     {
         if (!Vector128.IsHardwareAccelerated) return;

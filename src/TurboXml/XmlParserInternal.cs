@@ -92,6 +92,14 @@ internal ref struct XmlParserInternal
                     AppendCharacters(data);
                     _stream.Advance(Vector128<ushort>.Count);
                     _column += Vector128<ushort>.Count;
+
+                    // Track the prolog as the scalar path does. The block has no control character,
+                    // so it is whitespace only when all its characters are spaces.
+                    _xmlParsingBody = true;
+                    if (data != Vector128.Create((ushort)' '))
+                    {
+                        _isInProlog = false;
+                    }
                 }
             }
 
