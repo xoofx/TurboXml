@@ -398,6 +398,45 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestStreamReturningOneBytePerRead()
+    {
+        // A read of the first bytes of a multi-byte character decodes no character
+        foreach (var xml in new[] { "<a>€€</a>", "<a/>€", "<a b=\"€𝄞\">𝄞x€</a>", $"<a>{new string('x', 20)}€{new string('y', 20)}</a>" })
+        {
+            var expecting = ParsePrint(xml);
+            Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream(Encoding.UTF8.GetBytes(xml))), xml);
+        }
+    }
+
+    [TestMethod]
+    public void TestStreamWithCharacterAcrossBufferBoundary()
+    {
+        // The stream is read by blocks of 16384 bytes: put each byte boundary of a multi-byte character at the end of a block
+        foreach (var character in new[] { "€", "𝄞" })
+        {
+            var characterByteCount = Encoding.UTF8.GetByteCount(character);
+            for (int bytesInFirstBlock = 1; bytesInFirstBlock < characterByteCount; bytesInFirstBlock++)
+            {
+                var xml = $"<a>{new string('x', 16384 - "<a>".Length - bytesInFirstBlock)}{character}</a>";
+                var expecting = ParsePrint(xml);
+                Assert.AreEqual(expecting, ParsePrint(new MemoryStream(Encoding.UTF8.GetBytes(xml))), $"{character} {bytesInFirstBlock}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void TestStreamEndingWithIncompleteCharacter()
+    {
+        // The first two bytes of the three bytes of €
+        byte[] bytes = [.. "<a/>"u8, 0xE2, 0x82];
+        // The decoder replaces the incomplete character at the end of the stream
+        var expecting = "BeginTag(1:2): a\nEndTagEmpty\nContent(1:5): �";
+
+        Assert.AreEqual(expecting, ParsePrint(new MemoryStream(bytes)));
+        Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream(bytes)));
+    }
+
+    [TestMethod]
     public void TestEndOfLines()
     {
         // Check \r\n
@@ -670,6 +709,24 @@ public class XmlRuntimeTests
         return NormalizeNewLines(handler.Writer.ToString()!);
     }
 
+    private static string ParsePrint(string xml)
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        return NormalizeNewLines(handler.Writer.ToString()!);
+    }
+
+    private static string ParsePrint(Stream stream)
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        using (stream)
+        {
+            XmlParser.Parse(stream, ref handler);
+        }
+
+        return NormalizeNewLines(handler.Writer.ToString()!);
+    }
+
     private static void CheckCharRange((int, int)[] ranges, Func<char, bool> check)
     {
         var builder = new StringBuilder();
@@ -749,4 +806,14 @@ public class XmlRuntimeTests
     }
 
     private readonly record struct ProcessingInstruction(string Target, string Data, int Line, int Column);
+
+    /// <summary>
+    /// A stream that returns at most one byte per read, as a network stream or a pipe can.
+    /// </summary>
+    private sealed class OneByteReadStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override int Read(byte[] buffer, int offset, int count) => base.Read(buffer, offset, Math.Min(count, 1));
+
+        public override int Read(Span<byte> buffer) => base.Read(buffer.Slice(0, Math.Min(buffer.Length, 1)));
+    }
 }
