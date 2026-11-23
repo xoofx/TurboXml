@@ -195,7 +195,8 @@ internal ref struct XmlParserInternal
 
                 case '\r':
                     _xmlParsingBody = true;
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendCharacter('\n');
 
                     if (!TryReadNext(out c))
                     {
@@ -206,7 +207,6 @@ internal ref struct XmlParserInternal
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
@@ -525,6 +525,8 @@ internal ref struct XmlParserInternal
         }
     }
 
+    private const int MaxCodePoint = 0x10FFFF;
+
     private void ParseEntity(ref char c)
     {
         // Parse EntityName
@@ -549,6 +551,8 @@ internal ref struct XmlParserInternal
                     if (XmlChar.TryGetHexDigit(c, out int newValue))
                     {
                         charCodePoint = (charCodePoint << 4) + newValue;
+                        if (charCodePoint > MaxCodePoint)
+                            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
                     }
                     else
                     {
@@ -568,6 +572,8 @@ internal ref struct XmlParserInternal
                     if ((uint)d <= 9)
                     {
                         charCodePoint = charCodePoint * 10 + d;
+                        if (charCodePoint > MaxCodePoint)
+                            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
                     }
                     else
                     {
@@ -583,6 +589,10 @@ internal ref struct XmlParserInternal
 
             if (c != ';')
                 ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingSemiComma);
+
+            // [WFC: Legal Character] Characters referred to using character references MUST match the production for Char.
+            if (charCodePoint <= char.MaxValue && !XmlChar.IsChar((char)charCodePoint))
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
             return;
         }
 
@@ -1161,14 +1171,14 @@ internal ref struct XmlParserInternal
                     AppendCharacter(c);
                     break;
                 case '\r':
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendCharacter('\n');
                     c = ReadNext();
 
                     _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
@@ -1259,14 +1269,14 @@ internal ref struct XmlParserInternal
                     break;
 
                 case '\r':
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendCharacter('\n');
                     c = ReadNext();
 
                     _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {

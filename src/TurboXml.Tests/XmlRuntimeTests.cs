@@ -363,12 +363,12 @@ public class XmlRuntimeTests
 
         var expecting = """
                         XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
-                        Content(1:39): \r\n
-                        Comment(2:5):  comment\r\n 
+                        Content(1:39): \n
+                        Comment(2:5):  comment\n 
                         BeginTag(3:6): root
                         Attribute(4:1)-(4:6): attr="hello\nworld"
-                        Content(5:8): content\r\n
-                        CData(6:10):  \r\n 
+                        Content(5:8): content\n
+                        CData(6:10):  \n 
                         EndTag(7:7): root
                         """;
         expecting = NormalizeNewLines(expecting);
@@ -380,12 +380,12 @@ public class XmlRuntimeTests
         result = NormalizeNewLines(handler.Writer.ToString()!);
         expecting = """
                     XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
-                    Content(1:39): \r
-                    Comment(2:5):  comment\r 
+                    Content(1:39): \n
+                    Comment(2:5):  comment\n 
                     BeginTag(3:6): root
                     Attribute(4:1)-(4:6): attr="hello\nworld"
-                    Content(5:8): content\r
-                    CData(6:10):  \r 
+                    Content(5:8): content\n
+                    CData(6:10):  \n 
                     EndTag(7:7): root
                     """;
         expecting = NormalizeNewLines(expecting);
@@ -568,6 +568,25 @@ public class XmlRuntimeTests
                         BeginTag(1:2): a𝄞b
                         Error(1:10): Invalid end of XML stream
                         """;
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
+    public void TestCharacterReferenceToCarriageReturnIsNotNormalized()
+    {
+        var xml = "<a>1\r\n2\r3&#xD;&#xD;&#xA;</a>";
+        var expecting = """
+                        BeginTag(1:2): a
+                        Content(1:4): 1\n2\n3\r\r\n
+                        EndTag(3:19): a
+                        """;
+
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+
+        handler.Writer = new StringWriter();
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
         Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
     }
 
