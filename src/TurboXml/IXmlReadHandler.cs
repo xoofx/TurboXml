@@ -36,6 +36,7 @@ public interface IXmlReadHandler
     /// <param name="column">The column this processing instruction occurred.</param>
     /// <remarks>
     /// The processing instruction can be reconstructed exactly as <c>&lt;?</c><paramref name="target"/><paramref name="data"/><c>?&gt;</c>.
+    /// Line ends in <paramref name="data"/> are therefore passed unchanged: unlike text, CDATA sections and comments, where <c>\r\n</c> and <c>\r</c> are passed as <c>\n</c>, they are not normalized as XML 1.0 section 2.11 requires.
     /// </remarks>
     void OnProcessingInstruction(ReadOnlySpan<char> target, ReadOnlySpan<char> data, int line, int column)
     {

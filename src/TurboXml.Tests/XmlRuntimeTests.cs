@@ -80,7 +80,7 @@ public class XmlRuntimeTests
     [TestMethod]
     public void TestProcessingInstructionDataCanReconstructSource()
     {
-        const string xml = "<?custom \tdata?\r\nhere?>";
+        const string xml = "<?custom \tdata?\r\nhere\rend?>";
         var handler = new ProcessingInstructionHandler();
 
         XmlParser.Parse(xml, handler);
@@ -88,7 +88,8 @@ public class XmlRuntimeTests
         Assert.HasCount(1, handler.Instructions);
         var instruction = handler.Instructions[0];
         Assert.AreEqual("custom", instruction.Target);
-        Assert.AreEqual(" \tdata?\r\nhere", instruction.Data);
+        // The data keeps its line ends: \r\n and \r are not normalized to \n
+        Assert.AreEqual(" \tdata?\r\nhere\rend", instruction.Data);
         Assert.AreEqual(xml, $"<?{instruction.Target}{instruction.Data}?>");
         Assert.AreEqual(0, instruction.Line);
         Assert.AreEqual(1, instruction.Column);
