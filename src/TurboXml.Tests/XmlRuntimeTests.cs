@@ -80,7 +80,7 @@ public class XmlRuntimeTests
     [TestMethod]
     public void TestProcessingInstructionDataCanReconstructSource()
     {
-        const string xml = "<?custom \tdata?\r\nhere?>";
+        const string xml = "<?custom \tdata?\r\nhere\rend?>";
         var handler = new ProcessingInstructionHandler();
 
         XmlParser.Parse(xml, handler);
@@ -88,7 +88,8 @@ public class XmlRuntimeTests
         Assert.HasCount(1, handler.Instructions);
         var instruction = handler.Instructions[0];
         Assert.AreEqual("custom", instruction.Target);
-        Assert.AreEqual(" \tdata?\r\nhere", instruction.Data);
+        // The data keeps its line ends: \r\n and \r are not normalized to \n
+        Assert.AreEqual(" \tdata?\r\nhere\rend", instruction.Data);
         Assert.AreEqual(xml, $"<?{instruction.Target}{instruction.Data}?>");
         Assert.AreEqual(0, instruction.Line);
         Assert.AreEqual(1, instruction.Column);
@@ -235,6 +236,50 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestXmlDeclarationAndDocumentTypeAfterText()
+    {
+        // Text of 8 or 16 characters goes through the vectorized text loop
+        foreach (var text in new[] { " ", new string(' ', 8), new string(' ', 16), "a", "abcdefgh", "abcdefghijklmnop" })
+        {
+            var xml = $"""{text}<?xml version="1.0"?><a/>""";
+            var expecting = NormalizeNewLines(
+                $"""
+                 Content({text})
+                 Error(Invalid XML declaration. It must be the first node in the document)
+                 """);
+            Assert.AreEqual(expecting, ParseEvents(xml), xml);
+            Assert.AreEqual(expecting, ParseStreamEvents(xml, new XmlParserOptions()), xml);
+        }
+
+        var options = new XmlParserOptions { IgnoreDtd = true };
+        foreach (var text in new[] { "a", "abcdefgh", "abcdefghijklmnop", "       a" })
+        {
+            var xml = $"{text}<!DOCTYPE a><a/>";
+            var expecting = NormalizeNewLines(
+                $"""
+                 Content({text})
+                 Error(Invalid document type declaration)
+                 """);
+            Assert.AreEqual(expecting, ParseEvents(xml, options), xml);
+            Assert.AreEqual(expecting, ParseStreamEvents(xml, options), xml);
+        }
+
+        // [27] Misc ::= Comment | PI | S, so whitespace may come before the document type declaration
+        foreach (var text in new[] { " ", new string(' ', 8), new string(' ', 16) })
+        {
+            var xml = $"{text}<!DOCTYPE a><a/>";
+            var expecting = NormalizeNewLines(
+                $"""
+                 Content({text})
+                 BeginTag(a)
+                 EndTagEmpty
+                 """);
+            Assert.AreEqual(expecting, ParseEvents(xml, options), xml);
+            Assert.AreEqual(expecting, ParseStreamEvents(xml, options), xml);
+        }
+    }
+
+    [TestMethod]
     public void TestCommonCharSimd()
     {
         if (!Vector128.IsHardwareAccelerated) return;
@@ -354,6 +399,101 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestStreamReturningOneBytePerRead()
+    {
+        // A read of the first bytes of a multi-byte character decodes no character
+        foreach (var xml in new[] { "<a>€€</a>", "<a/>€", "<a b=\"€𝄞\">𝄞x€</a>", $"<a>{new string('x', 20)}€{new string('y', 20)}</a>" })
+        {
+            var expecting = ParsePrint(xml);
+            Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream(Encoding.UTF8.GetBytes(xml))), xml);
+        }
+    }
+
+    [TestMethod]
+    public void TestStreamWithCharacterAcrossBufferBoundary()
+    {
+        // The stream is read by blocks of 16384 bytes: put each byte boundary of a multi-byte character at the end of a block
+        foreach (var character in new[] { "€", "𝄞" })
+        {
+            var characterByteCount = Encoding.UTF8.GetByteCount(character);
+            for (int bytesInFirstBlock = 1; bytesInFirstBlock < characterByteCount; bytesInFirstBlock++)
+            {
+                var xml = $"<a>{new string('x', 16384 - "<a>".Length - bytesInFirstBlock)}{character}</a>";
+                var expecting = ParsePrint(xml);
+                Assert.AreEqual(expecting, ParsePrint(new MemoryStream(Encoding.UTF8.GetBytes(xml))), $"{character} {bytesInFirstBlock}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void TestStreamEndingWithIncompleteCharacter()
+    {
+        // The first two bytes of the three bytes of €
+        byte[] bytes = [.. "<a/>"u8, 0xE2, 0x82];
+        // The decoder replaces the incomplete character at the end of the stream
+        var expecting = "BeginTag(1:2): a\nEndTagEmpty\nContent(1:5): \uFFFD";
+
+        Assert.AreEqual(expecting, ParsePrint(new MemoryStream(bytes)));
+        Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream(bytes)));
+    }
+
+    [TestMethod]
+    public void TestStreamEndingWithIncompleteCharacterAndStrictEncoding()
+    {
+        // XML 1.0 4.3.3: an encoding error is fatal, so a strict decoder throws when it is flushed at the end of the stream
+        var options = new XmlParserOptions(new UTF8Encoding(false, true));
+        byte[] bytes = [.. "<a/>"u8, 0xE2, 0x82];
+
+        Assert.Throws<DecoderFallbackException>(() => ParsePrint(new MemoryStream(bytes), options));
+        Assert.Throws<DecoderFallbackException>(() => ParsePrint(new OneByteReadStream(bytes), options));
+    }
+
+    [TestMethod]
+    public void TestStreamReturningOneBytePerReadWithStrictEncoding()
+    {
+        // A read that ends inside a multi-byte character does not flush the decoder, so a strict decoder does not throw
+        var options = new XmlParserOptions(new UTF8Encoding(false, true));
+        var xml = "<a>€𝄞</a>";
+
+        Assert.AreEqual(ParsePrint(xml), ParsePrint(new OneByteReadStream(Encoding.UTF8.GetBytes(xml)), options));
+    }
+
+    [TestMethod]
+    public void TestByteOrderMarkWithGivenEncoding()
+    {
+        foreach (var (encoding, encodingName) in new (Encoding, string)[]
+                 {
+                     (new UTF8Encoding(true), "UTF-8"),
+                     (new UTF8Encoding(false), "UTF-8 without preamble"),
+                     (new UnicodeEncoding(false, true), "UTF-16"),
+                     (new UnicodeEncoding(true, false), "UTF-16 be without preamble"),
+                     (new UTF32Encoding(false, true), "UTF-32"),
+                     (new UTF32Encoding(true, false), "UTF-32 be without preamble"),
+                 })
+        {
+            var options = new XmlParserOptions(encoding);
+            var byteOrderMark = encoding.GetBytes("\uFEFF");
+            foreach (var xml in new[] { """<?xml version="1.0"?><a/>""", "<a>x</a>" })
+            {
+                var expecting = ParsePrint(xml);
+                var bytes = encoding.GetBytes(xml);
+                Assert.AreEqual(expecting, ParsePrint(new MemoryStream([.. byteOrderMark, .. bytes]), options), $"{encodingName} with BOM: {xml}");
+                Assert.AreEqual(expecting, ParsePrint(new OneByteReadStream([.. byteOrderMark, .. bytes]), options), $"{encodingName} with BOM, one byte per read: {xml}");
+                Assert.AreEqual(expecting, ParsePrint(new MemoryStream(bytes), options), $"{encodingName} without BOM: {xml}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void TestByteOrderMarkAfterShortDetectionRead()
+    {
+        // The detection of the encoding reads one byte, too few to see the UTF-8 byte order mark
+        var xml = """<?xml version="1.0"?><a/>""";
+        byte[] bytes = [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(xml)];
+        Assert.AreEqual(ParsePrint(xml), ParsePrint(new OneByteReadStream(bytes)));
+    }
+
+    [TestMethod]
     public void TestEndOfLines()
     {
         // Check \r\n
@@ -363,12 +503,12 @@ public class XmlRuntimeTests
 
         var expecting = """
                         XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
-                        Content(1:39): \r\n
-                        Comment(2:5):  comment\r\n 
+                        Content(1:39): \n
+                        Comment(2:5):  comment\n 
                         BeginTag(3:6): root
-                        Attribute(4:1)-(4:6): attr="hello\nworld"
-                        Content(5:8): content\r\n
-                        CData(6:10):  \r\n 
+                        Attribute(4:1)-(4:6): attr="hello world"
+                        Content(5:8): content\n
+                        CData(6:10):  \n 
                         EndTag(7:7): root
                         """;
         expecting = NormalizeNewLines(expecting);
@@ -380,12 +520,12 @@ public class XmlRuntimeTests
         result = NormalizeNewLines(handler.Writer.ToString()!);
         expecting = """
                     XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
-                    Content(1:39): \r
-                    Comment(2:5):  comment\r 
+                    Content(1:39): \n
+                    Comment(2:5):  comment\n 
                     BeginTag(3:6): root
-                    Attribute(4:1)-(4:6): attr="hello\nworld"
-                    Content(5:8): content\r
-                    CData(6:10):  \r 
+                    Attribute(4:1)-(4:6): attr="hello world"
+                    Content(5:8): content\n
+                    CData(6:10):  \n 
                     EndTag(7:7): root
                     """;
         expecting = NormalizeNewLines(expecting);
@@ -393,6 +533,26 @@ public class XmlRuntimeTests
 
         static string GetXml(string nl)
             => $"<?xml version=\"1.0\" encoding=\"utf-8\"?>{nl}<!-- comment{nl} --><root{nl}attr=\"hello{nl}world\">content{nl}<![CDATA[ {nl} ]]></root>";
+    }
+
+    [TestMethod]
+    public void TestAttributeValueWhitespaceNormalization()
+    {
+        // XML 1.0 3.3.3: each literal tab, line feed, carriage return or \r\n is passed as a space, a character reference as its character.
+        // 32 characters go through the vectorized attribute value loops before the tab.
+        var block = "0123456789abcdef0123456789abcdef";
+        var xml = $"<a b='x\r\ny\tz\nw&#xD;' c=\"1\r2&#x9;&#xA;&#xD;3\" d=\"{block}\t{block}\"/>";
+        var expecting = NormalizeNewLines(
+            $"""
+             BeginTag(1:2): a
+             Attribute(1:4)-(1:6): b="x y z w\r"
+             Attribute(3:9)-(3:11): c="1 2\t\n\r3"
+             Attribute(4:20)-(4:22): d="{block} {block}"
+             EndTagEmpty
+             """);
+
+        Assert.AreEqual(expecting, ParsePrint(xml));
+        Assert.AreEqual(expecting, ParsePrint(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
     [TestMethod]
@@ -572,6 +732,47 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestCharacterReferenceToCarriageReturnIsNotNormalized()
+    {
+        var xml = "<a>1\r\n2\r3&#xD;&#xD;&#xA;</a>";
+        var expecting = """
+                        BeginTag(1:2): a
+                        Content(1:4): 1\n2\n3\r\r\n
+                        EndTag(3:19): a
+                        """;
+
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+
+        handler.Writer = new StringWriter();
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+        Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
+    public void TestEndOfStreamAfterClosingBrackets()
+    {
+        foreach (var text in new[] { "]", "]]", "x]" })
+        {
+            var xml = $"<a>{text}";
+            var expecting = $"""
+                             BeginTag(1:2): a
+                             Content(1:4): {text}
+                             Error(1:{4 + text.Length}): Invalid tag a not closed at the end of the document.
+                             """;
+
+            var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+            XmlParser.Parse(xml, ref handler);
+            Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!), xml);
+
+            handler.Writer = new StringWriter();
+            XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+            Assert.AreEqual(NormalizeNewLines(expecting), NormalizeNewLines(handler.Writer.ToString()!), xml);
+        }
+    }
+
+    [TestMethod]
     public void TestDefaultError()
     {
         var handler = new EmptyReadHandler();
@@ -604,6 +805,24 @@ public class XmlRuntimeTests
         var handler = new XmlEventHandler { Writer = new StringWriter() };
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
         XmlParser.Parse(stream, ref handler, options);
+        return NormalizeNewLines(handler.Writer.ToString()!);
+    }
+
+    private static string ParsePrint(string xml)
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        return NormalizeNewLines(handler.Writer.ToString()!);
+    }
+
+    private static string ParsePrint(Stream stream, XmlParserOptions options = default)
+    {
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        using (stream)
+        {
+            XmlParser.Parse(stream, ref handler, options);
+        }
+
         return NormalizeNewLines(handler.Writer.ToString()!);
     }
 
@@ -670,7 +889,7 @@ public class XmlRuntimeTests
     [DataRow("<root>ab&#x1F600;cd</root>", "Text:ab\U0001F600cd:copy")]
     [DataRow("<root/>a&lt;b", "Text:a<b:copy")]
     [DataRow("<root a=\"x&quot;y\"/>", "Attribute(a):x\"y:copy")]
-    [DataRow("<root a=\"x\r\ny\"/>", "Attribute(a):x\ny:copy")]
+    [DataRow("<root a=\"x\r\ny\"/>", "Attribute(a):x y:copy")]
     [DataRow("<root a=\"\"/>", "Attribute(a)::input")]
     [DataRow("<root><![CDATA[a]]b]c]]></root>", "CData:a]]b]c:input")]
     [DataRow("<root><![CDATA[]]></root>", "CData::input")]
@@ -798,4 +1017,14 @@ public class XmlRuntimeTests
     }
 
     private readonly record struct ProcessingInstruction(string Target, string Data, int Line, int Column);
+
+    /// <summary>
+    /// A stream that returns at most one byte per read, as a network stream or a pipe can.
+    /// </summary>
+    private sealed class OneByteReadStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override int Read(byte[] buffer, int offset, int count) => base.Read(buffer, offset, Math.Min(count, 1));
+
+        public override int Read(Span<byte> buffer) => base.Read(buffer.Slice(0, Math.Min(buffer.Length, 1)));
+    }
 }

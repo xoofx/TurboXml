@@ -34,23 +34,35 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
         _index = 0;
         _bufferOffset = 0;
 
+        var byteOrderMarkLength = 0;
         if (encoding is null)
         {
-            var detectedEncoding = DetectEncodingOrNull(stream, out var offset);
+            var detectedEncoding = DetectEncodingOrNull(stream, out byteOrderMarkLength);
             if (detectedEncoding != null)
             {
                 encoding ??= detectedEncoding;
             }
 
             encoding ??= Encoding.UTF8;
-            if (offset > 0)
+            if (byteOrderMarkLength > 0)
             {
-                _stream.Position += offset;
+                _stream.Position += byteOrderMarkLength;
             }
         }
 
         _decoder = encoding.GetDecoder();
         _text = ArrayPool<char>.Shared.Rent(encoding.GetMaxCharCount(_buffer.Length));
+
+        // When the encoding is given, or the detection did not skip a byte order mark, the decoder passes it as U+FEFF:
+        // it is not part of the document (XML 1.0 appendix F), so skip it.
+        if (byteOrderMarkLength == 0)
+        {
+            FillBuffer();
+            if (_length > 0 && _text[0] == '\uFEFF')
+            {
+                _index = 1;
+            }
+        }
     }
 
     public bool TryReadNext(out char c)
@@ -82,28 +94,41 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
             return;
         }
 
-        var bufferOffset = _bufferOffset;
         var buffer = _buffer;
-        var read = _stream.Read(buffer, bufferOffset, buffer.Length - bufferOffset);
-        if (read == 0)
+        var text = _text;
+        while (true)
         {
-            _length = -1;
-            return;
-        }
+            var bufferOffset = _bufferOffset;
+            var read = _stream.Read(buffer, bufferOffset, buffer.Length - bufferOffset);
+            var byteCount = bufferOffset + read;
 
-        _decoder.Convert(buffer, 0, bufferOffset + read, _text, 0, _text.Length, false, out var byteConverted, out _length, out _);
-        if (byteConverted > 0)
-        {
-            bufferOffset = read - byteConverted;
-            Buffer.BlockCopy(buffer, byteConverted, buffer, 0, bufferOffset);
-        }
-        else
-        {
-            _length = -1;
-            bufferOffset = 0;
-        }
+            // At the end of the stream, flush the decoder so that an incomplete character is decoded instead of dropped
+            var isEndOfStream = read == 0;
+            _decoder.Convert(buffer, 0, byteCount, text, 0, text.Length, isEndOfStream, out var bytesUsed, out var charsUsed, out _);
 
-        _bufferOffset = bufferOffset;
+            // Keep the bytes not converted for the next read
+            bufferOffset = byteCount - bytesUsed;
+            if (bufferOffset > 0)
+            {
+                Buffer.BlockCopy(buffer, bytesUsed, buffer, 0, bufferOffset);
+            }
+
+            _bufferOffset = bufferOffset;
+
+            if (charsUsed > 0)
+            {
+                _length = charsUsed;
+                return;
+            }
+
+            if (isEndOfStream)
+            {
+                _length = -1;
+                return;
+            }
+
+            // A read of only the first bytes of a multi-byte character decodes no character: read more
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
