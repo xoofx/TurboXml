@@ -11,7 +11,7 @@ namespace TurboXml;
 /// <summary>
 /// Parsing options for the <see cref="XmlParser"/> class.
 /// </summary>
-/// <param name="Encoding">Force using this encoding when parsing a stream. By default, TurboXml will detect the encoding by following the XML specs.</param>
+/// <param name="Encoding">Force using this encoding when parsing a stream. A byte order mark at the start of the stream is skipped. By default, TurboXml will detect the encoding by following the XML specs.</param>
 public readonly record struct XmlParserOptions(Encoding? Encoding = null)
 {
     /// <summary>
@@ -21,7 +21,7 @@ public readonly record struct XmlParserOptions(Encoding? Encoding = null)
     {
     }
 
-    /// <summary>Force using this encoding when parsing a stream. By default, TurboXml will detect the encoding by following the XML specs.</summary>
+    /// <summary>Force using this encoding when parsing a stream. A byte order mark at the start of the stream is skipped. By default, TurboXml will detect the encoding by following the XML specs.</summary>
     public Encoding? Encoding { get; init; } = Encoding;
 
     /// <summary>

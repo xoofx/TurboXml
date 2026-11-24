@@ -1,0 +1,16 @@
+﻿BeginTag(1:2): a
+Content(1:4): \n
+CData(2:10): x]
+Content(2:15): \n
+CData(3:10): x]]
+Content(3:16): \n
+CData(4:10): ]
+Content(4:14): \n
+CData(5:10): x]]]y
+Content(5:18): \n
+CData(6:10): 0123456789abcdef]
+Content(6:30): \n
+CData(7:10): 0123456789abcdef0123456789abcdef]]]
+Content(7:48): \n
+EndTag(8:3): a
+Content(8:5): \n
