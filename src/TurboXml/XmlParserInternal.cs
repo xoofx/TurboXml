@@ -34,6 +34,8 @@ internal ref struct XmlParserInternal
     private bool _isInProlog;
     private bool _hasDocumentTypeDeclaration;
     private readonly bool _ignoreDtd;
+    private readonly bool _rejectFragments;
+    private bool _hasRootElement;
 
     private char[] _buffer;
     private int _length;
@@ -47,6 +49,7 @@ internal ref struct XmlParserInternal
         _column = -1;
         _isInProlog = true;
         _ignoreDtd = options.IgnoreDtd;
+        _rejectFragments = options.RejectFragments;
     }
 
     public void Dispose()
@@ -129,6 +132,9 @@ internal ref struct XmlParserInternal
                         }
                         else if (c == '[')
                         {
+                            if (_rejectFragments && !HasElementsInStack)
+                                ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement);
+
                             _isInProlog = false;
                             ParseCData();
                         }
@@ -157,6 +163,10 @@ internal ref struct XmlParserInternal
 
                     break;
                 case '&':
+                    // [27] Misc ::= Comment | PI | S, so a reference is not allowed outside the root element
+                    if (_rejectFragments && !HasElementsInStack)
+                        ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement);
+
                     _xmlParsingBody = true;
                     _isInProlog = false;
                     ParseEntity(ref c);
@@ -205,20 +215,20 @@ internal ref struct XmlParserInternal
                     _xmlParsingBody = true;
                     // As per the XML spec, we need to normalize \r and \r\n to \n
                     AppendCharacter('\n');
+                    _line++;
+                    _column = -1;
 
                     if (!TryReadNext(out c))
                     {
-                        return;
+                        goto EndOfStream;
                     }
 
-                    _line++;
                     if (c == '\n')
                     {
                         _column = -1;
                     }
                     else
                     {
-                        _column = 0;
                         goto ProcessNextChar;
                     }
 
@@ -260,6 +270,11 @@ internal ref struct XmlParserInternal
         {
             CheckLastClosingElements();
         }
+        else if (_rejectFragments && !_hasRootElement)
+        {
+            // [1] document ::= prolog element Misc*
+            ThrowInvalidXml(XmlThrow.InvalidMissingRootElement);
+        }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -291,6 +306,14 @@ internal ref struct XmlParserInternal
         int startNameIndex = _length;
         if (!TryParseName(ref c))
             XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidBeginTag, line, column);
+
+        if (_rejectFragments && !HasElementsInStack)
+        {
+            if (_hasRootElement)
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidSecondRootElement, line, column);
+
+            _hasRootElement = true;
+        }
 
         var name = GetTextSpan(startNameIndex);
         AppendInt(name.Length);
@@ -1677,7 +1700,13 @@ internal ref struct XmlParserInternal
         var length = charBufferLength - lastNameStackIndex;
         if (length > 0)
         {
-            _handler.OnText(new ReadOnlySpan<char>(_buffer, lastNameStackIndex, length), _contentLine, _contentColumn);
+            var text = new ReadOnlySpan<char>(_buffer, lastNameStackIndex, length);
+
+            // [27] Misc ::= Comment | PI | S, so only whitespace is allowed outside the root element
+            if (_rejectFragments && !HasElementsInStack && text.ContainsAnyExcept(" \t\r\n"))
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement, _contentLine, _contentColumn);
+
+            _handler.OnText(text, _contentLine, _contentColumn);
             _length = lastNameStackIndex;
         }
     }
