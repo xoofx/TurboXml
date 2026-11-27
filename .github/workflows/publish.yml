@@ -1,0 +1,92 @@
+name: publish
+
+# Manually triggered: builds, tests, packs and publishes TurboXml to GitHub Packages,
+# then creates a GitHub release (tag + auto-generated release notes).
+#
+# Version = <major>.<minor>.<patch>
+#  - major.minor: read from `MinVerMinimumMajorMinor` in src/TurboXml/TurboXml.csproj
+#  - patch:       next free patch number after the latest `v<major>.<minor>.*` tag (0 if none)
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create the tag and the GitHub release
+  packages: write   # push to GitHub Packages
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags (needed for versioning and release notes)
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: src/global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          majorminor="$(dotnet msbuild src/TurboXml/TurboXml.csproj -getProperty:MinVerMinimumMajorMinor | tr -d '[:space:]')"
+          if ! [[ "$majorminor" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::MinVerMinimumMajorMinor must be '<major>.<minor>' in TurboXml.csproj (got '$majorminor')"
+            exit 1
+          fi
+
+          git fetch --tags --force
+          latest="$(git tag --list "v${majorminor}.*" | sed -E "s/^v//" | grep -E "^${majorminor//./\\.}\.[0-9]+$" | sort -V | tail -n 1 || true)"
+          if [ -z "$latest" ]; then
+            patch=0
+          else
+            patch=$(( ${latest##*.} + 1 ))
+          fi
+
+          version="${majorminor}.${patch}"
+          echo "Version: $version (previous: ${latest:-none})"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: dotnet build src/TurboXml.slnx -c Release -p:MinVerVersionOverride=${{ steps.version.outputs.version }}
+
+      - name: Test
+        run: dotnet test src/TurboXml.slnx -c Release --no-build
+
+      - name: Pack
+        run: >
+          dotnet pack src/TurboXml/TurboXml.csproj -c Release --no-build -o artifacts
+          -p:MinVerVersionOverride=${{ steps.version.outputs.version }}
+
+      - name: Publish to GitHub Packages
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --skip-duplicate
+
+      - name: Create release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${{ steps.version.outputs.tag }}"
+          "artifacts/*.nupkg"
+          --target "${{ github.sha }}"
+          --title "${{ steps.version.outputs.version }}"
+          --generate-notes
+          --latest

@@ -1,5 +1,5 @@
 ﻿XmlDeclaration(1:2): version="1.0" encoding="utf-8" standalone=""
 Content(1:39): \n
 BeginTag(2:2): root
-Content(2:7): ABAB\n\x0B\x0C\r\x0E\x0F\n\x0B\x0F𐀀
-EndTag(2:85): root
+Content(2:7): ABAB\nKL\rNO\nKO𐀀
+EndTag(2:91): root

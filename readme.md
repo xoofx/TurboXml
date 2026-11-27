@@ -1,4 +1,4 @@
-# TurboXml [![ci](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml/badge.svg)](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml) ![coverage](https://gist.githubusercontent.com/xoofx/4b1dc8d0fa14dd6a3846e78e5f0eafae/raw/dotnet-releaser-coverage-badge-xoofx-TurboXml.svg) [![NuGet](https://img.shields.io/nuget/v/TurboXml.svg)](https://www.nuget.org/packages/TurboXml/)
+# TurboXml [![ci](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml/badge.svg)](https://github.com/xoofx/TurboXml/actions/workflows/ci.yml) [![NuGet](https://img.shields.io/nuget/v/TurboXml.svg)](https://www.nuget.org/packages/TurboXml/)
 
 <img align="right" width="160px" src="https://raw.githubusercontent.com/xoofx/TurboXml/main/img/TurboXml.png">
 
@@ -95,6 +95,7 @@ This parser is following the [Extensible Markup Language (XML) 1.0 (Fifth Editio
 - By default, this parser rejects DTD and XML directives (`<!DOCTYPE ...>`) and does not support custom entities. Set `XmlParserOptions.IgnoreDtd` to `true` to skip a legal DTD declaration without fetching external resources, processing DTD declarations, or expanding custom entities.
 - Generic processing instructions such as `<?xpacket ...?>` or `<?xml-stylesheet ...?>` trigger `IXmlReadHandler.OnProcessingInstruction`. Its default implementation is empty, so existing handlers continue to ignore them. The `data` callback parameter preserves the raw source after the target, including separating whitespace. Only the XML declaration `<?xml ...?>` triggers `IXmlReadHandler.OnXmlDeclaration`.
 - This parser checks for well formed XML, matching begin and end tags and report an error if they are not matching
+- By default, this parser accepts XML fragments: no root element, more than one root element, or text outside the root element. Set `XmlParserOptions.RejectFragments` to `true` to report an error for them.
 - This parser does not check for duplicated attributes.
   - It is the responsibility of the XML handler to implement such a check. The rationale is that the check can be performed more efficiently depending on user scenarios (e.g bit flags...etc.)
 
@@ -105,6 +106,13 @@ You need to install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotne
 ```console
 $ dotnet build src -c Release
 ```
+
+## 📦 Publishing to GitHub Packages
+
+The [`publish`](.github/workflows/publish.yml) workflow is triggered manually (Actions → publish → Run workflow). It builds, tests, packs and pushes the package to GitHub Packages, then creates a GitHub release with auto-generated release notes.
+
+- The major and minor version come from `MinVerMinimumMajorMinor` in `src/TurboXml/TurboXml.csproj` (currently `2.1`). Change it to start a new minor/major line.
+- The patch version is automatic: the next number after the latest `v<major>.<minor>.*` tag (starting at `0`).
 
 ## 🪪 License
 

@@ -8,7 +8,6 @@
     <File Path="../license.txt" />
     <File Path="../readme.md" />
     <File Path="Directory.Packages.props" />
-    <File Path="dotnet-releaser.toml" />
     <File Path="global.json" />
   </Folder>
   <Project Path="TurboXml.Bench/TurboXml.Bench.csproj" />

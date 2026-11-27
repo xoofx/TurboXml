@@ -34,19 +34,27 @@ internal ref struct XmlParserInternal
     private bool _isInProlog;
     private bool _hasDocumentTypeDeclaration;
     private readonly bool _ignoreDtd;
+    private readonly bool _rejectFragments;
+    private bool _hasRootElement;
 
     private char[] _buffer;
     private int _length;
     private int _lastNameStackIndex;
+
+    // For a string input, the content in progress is the slice of the input at _sliceStart, until a character differs from the input.
+    private int _sliceStart;
+    private int _sliceLength;
 
     public XmlParserInternal(ref THandler handler, ref TCharProvider stream, XmlParserOptions options)
     {
         _handler = ref handler;
         _stream = ref stream;
         _buffer = ArrayPool<char>.Shared.Rent(128);
+        _sliceStart = -1;
         _column = -1;
         _isInProlog = true;
         _ignoreDtd = options.IgnoreDtd;
+        _rejectFragments = options.RejectFragments;
     }
 
     public void Dispose()
@@ -72,6 +80,7 @@ internal ref struct XmlParserInternal
 
     private void ParseImpl()
     {
+        StartContent();
         while (true)
         {
             if (Vector128.IsHardwareAccelerated)
@@ -84,12 +93,13 @@ internal ref struct XmlParserInternal
                     test |= Vector128.GreaterThanOrEqual(data, Vector128.Create((ushort)XmlChar.HIGH_SURROGATE_START));
                     test |= Vector128.Equals(data, Vector128.Create((ushort)'&'));
                     test |= Vector128.Equals(data, Vector128.Create((ushort)'<'));
+                    test |= Vector128.Equals(data, Vector128.Create((ushort)']'));
                     if (test != Vector128<ushort>.Zero)
                     {
                         break;
                     }
 
-                    AppendCharacters(data);
+                    AppendContent(data);
                     _stream.Advance(Vector128<ushort>.Count);
                     _column += Vector128<ushort>.Count;
                 }
@@ -121,6 +131,9 @@ internal ref struct XmlParserInternal
                         }
                         else if (c == '[')
                         {
+                            if (_rejectFragments && !HasElementsInStack)
+                                ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement);
+
                             _isInProlog = false;
                             ParseCData();
                         }
@@ -146,39 +159,76 @@ internal ref struct XmlParserInternal
 
                     _contentLine = _line;
                     _contentColumn = _column + 1;
+                    StartContent();
 
                     break;
                 case '&':
+                    // [27] Misc ::= Comment | PI | S, so a reference is not allowed outside the root element
+                    if (_rejectFragments && !HasElementsInStack)
+                        ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement);
+
                     _xmlParsingBody = true;
                     _isInProlog = false;
                     ParseEntity(ref c);
                     break;
 
+                case ']':
+                    // [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
+                    _xmlParsingBody = true;
+                    _isInProlog = false;
+                    AppendContent(c);
+
+                    if (!TryReadNext(ref c))
+                    {
+                        goto EndOfStream;
+                    }
+
+                    if (c != ']')
+                    {
+                        goto ProcessNextChar;
+                    }
+
+                    do
+                    {
+                        AppendContent(c);
+                        if (!TryReadNext(ref c))
+                        {
+                            goto EndOfStream;
+                        }
+                    } while (c == ']');
+
+                    if (c == '>')
+                    {
+                        XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCDATAEndInText, _line, _column - 2);
+                    }
+
+                    goto ProcessNextChar;
+
                 case '\n':
                     _xmlParsingBody = true;
                     _line++;
                     _column = -1;
-                    AppendCharacter(c);
+                    AppendContent(c);
                     break;
 
                 case '\r':
                     _xmlParsingBody = true;
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendContent('\n');
+                    _line++;
+                    _column = -1;
 
                     if (!TryReadNext(ref c))
                     {
-                        return;
+                        goto EndOfStream;
                     }
 
-                    _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
-                        _column = 0;
                         goto ProcessNextChar;
                     }
 
@@ -193,14 +243,14 @@ internal ref struct XmlParserInternal
 
                     if (XmlChar.IsChar(c))
                     {
-                        AppendCharacter(c);
+                        AppendContent(c);
                     }
                     else
                     {
                         if (char.IsHighSurrogate(c))
                         {
-                            AppendCharacter(c);
-                            AppendCharacter(ReadLowSurrogate());
+                            AppendContent(c);
+                            AppendContent(ReadLowSurrogate());
                         }
                         else
                         {
@@ -212,12 +262,18 @@ internal ref struct XmlParserInternal
             }
         }
 
+    EndOfStream:
         FlushCharacterBuffer();
 
         // Flush any errors of opened tags
         if (HasElementsInStack)
         {
             CheckLastClosingElements();
+        }
+        else if (_rejectFragments && !_hasRootElement)
+        {
+            // [1] document ::= prolog element Misc*
+            ThrowInvalidXml(XmlThrow.InvalidMissingRootElement);
         }
     }
 
@@ -250,6 +306,14 @@ internal ref struct XmlParserInternal
         int startNameIndex = _length;
         if (!TryParseName(ref c))
             XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidBeginTag, line, column);
+
+        if (_rejectFragments && !HasElementsInStack)
+        {
+            if (_hasRootElement)
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidSecondRootElement, line, column);
+
+            _hasRootElement = true;
+        }
 
         var name = GetTextSpan(startNameIndex);
         AppendInt(name.Length);
@@ -383,6 +447,7 @@ internal ref struct XmlParserInternal
 
         var startChar = c;
         int startIndex = _length;
+        StartContent();
 
         if (Vector256.IsHardwareAccelerated)
         {
@@ -400,7 +465,7 @@ internal ref struct XmlParserInternal
                     break;
                 }
 
-                AppendCharacters(data);
+                AppendContent(data);
 
                 _stream.Advance(Vector256<ushort>.Count);
                 _column += Vector256<ushort>.Count;
@@ -422,7 +487,7 @@ internal ref struct XmlParserInternal
                     break;
                 }
 
-                AppendCharacters(data);
+                AppendContent(data);
 
                 _stream.Advance(Vector128<ushort>.Count);
                 _column += Vector128<ushort>.Count;
@@ -448,11 +513,11 @@ internal ref struct XmlParserInternal
                     _line++;
                     _column = -1;
 
-                    AppendCharacter(c);
+                    AppendContent(c);
                     break;
                 case '\r':
                     // As per the XML spec, we need to normalize \r and \r\n to \n
-                    AppendCharacter('\n');
+                    AppendContent('\n');
 
                     c = ReadNext();
 
@@ -471,16 +536,16 @@ internal ref struct XmlParserInternal
                 default:
                     if (c == startChar)
                     {
-                        return GetTextSpan(startIndex);
+                        return GetContentSpan(startIndex);
                     }
 
-                    AppendCharacter(c);
+                    AppendContent(c);
 
                     if (!XmlChar.IsAttrValueChar(c))
                     {
                         if (char.IsHighSurrogate(c))
                         {
-                            AppendCharacter(ReadLowSurrogate());
+                            AppendContent(ReadLowSurrogate());
                         }
                         else
                         {
@@ -491,6 +556,8 @@ internal ref struct XmlParserInternal
             }
         }
     }
+
+    private const int MaxCodePoint = 0x10FFFF;
 
     private void ParseEntity(ref char c)
     {
@@ -516,6 +583,8 @@ internal ref struct XmlParserInternal
                     if (XmlChar.TryGetHexDigit(c, out int newValue))
                     {
                         charCodePoint = (charCodePoint << 4) + newValue;
+                        if (charCodePoint > MaxCodePoint)
+                            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
                     }
                     else
                     {
@@ -535,6 +604,8 @@ internal ref struct XmlParserInternal
                     if ((uint)d <= 9)
                     {
                         charCodePoint = charCodePoint * 10 + d;
+                        if (charCodePoint > MaxCodePoint)
+                            XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
                     }
                     else
                     {
@@ -550,6 +621,10 @@ internal ref struct XmlParserInternal
 
             if (c != ';')
                 ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingSemiComma);
+
+            // [WFC: Legal Character] Characters referred to using character references MUST match the production for Char.
+            if (charCodePoint <= char.MaxValue && !XmlChar.IsChar((char)charCodePoint))
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidCharacterFound, line, column);
             return;
         }
 
@@ -602,7 +677,7 @@ internal ref struct XmlParserInternal
         if (c != ';')
             ThrowInvalidXml(XmlThrow.InvalidCharacterFoundExpectingSemiComma);
 
-        AppendCharacter(rc);
+        AppendContent(rc);
     }
 
     private void ExpectSpaces(ref char c)
@@ -1072,6 +1147,7 @@ internal ref struct XmlParserInternal
 
         int startLine = _line;
         int startColumn = _column + 1;
+        StartContent();
 
         while (true)
         {
@@ -1088,7 +1164,7 @@ internal ref struct XmlParserInternal
                         break;
                     }
 
-                    AppendCharacters(data);
+                    AppendContent(data);
                     _stream.Advance(Vector128<ushort>.Count);
                     _column += Vector128<ushort>.Count;
                 }
@@ -1107,31 +1183,31 @@ internal ref struct XmlParserInternal
                         c = ReadNext();
                         if (c == '>')
                         {
-                            _handler.OnCData(GetTextSpan(), startLine, startColumn);
+                            _handler.OnCData(GetContentSpan(_lastNameStackIndex), startLine, startColumn);
                             ClearCharacterBuffer();
                             return;
                         }
 
-                        AppendCharacter(']');
+                        AppendContent(']');
                     }
 
-                    AppendCharacter(']');
+                    AppendContent(']');
                     goto ProcessNextChar;
 
                 case '\n':
                     _line++;
                     _column = -1;
-                    AppendCharacter(c);
+                    AppendContent(c);
                     break;
                 case '\r':
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendContent('\n');
                     c = ReadNext();
 
                     _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
@@ -1143,14 +1219,14 @@ internal ref struct XmlParserInternal
                 default:
                     if (XmlChar.IsCDATAChar(c))
                     {
-                        AppendCharacter(c);
+                        AppendContent(c);
                     }
                     else
                     {
                         if (char.IsHighSurrogate(c))
                         {
-                            AppendCharacter(c);
-                            AppendCharacter(ReadLowSurrogate());
+                            AppendContent(c);
+                            AppendContent(ReadLowSurrogate());
                         }
                         else
                         {
@@ -1170,6 +1246,7 @@ internal ref struct XmlParserInternal
 
         int startLine = _line;
         int startColumn = _column + 1;
+        StartContent();
 
         while (true)
         {
@@ -1186,7 +1263,7 @@ internal ref struct XmlParserInternal
                         break;
                     }
 
-                    AppendCharacters(data);
+                    AppendContent(data);
                     _stream.Advance(Vector128<ushort>.Count);
                     _column += Vector128<ushort>.Count;
                 }
@@ -1206,30 +1283,30 @@ internal ref struct XmlParserInternal
                         if (c != '>')
                             ThrowInvalidXml(XmlThrow.InvalidDoubleDashFoundExpectingClosingLessThan);
 
-                        var span = GetTextSpan();
+                        var span = GetContentSpan(_lastNameStackIndex);
                         _handler.OnComment(span, startLine, startColumn);
                         ClearCharacterBuffer();
                         return;
                     }
 
-                    AppendCharacter('-');
+                    AppendContent('-');
                     goto ProcessNextChar;
 
                 case '\n':
                     _line++;
                     _column = -1;
-                    AppendCharacter(c);
+                    AppendContent(c);
                     break;
 
                 case '\r':
-                    AppendCharacter(c);
+                    // As per the XML spec, we need to normalize \r and \r\n to \n
+                    AppendContent('\n');
                     c = ReadNext();
 
                     _line++;
                     if (c == '\n')
                     {
                         _column = -1;
-                        AppendCharacter(c);
                     }
                     else
                     {
@@ -1242,14 +1319,14 @@ internal ref struct XmlParserInternal
                 default:
                     if (XmlChar.IsCommentChar(c))
                     {
-                        AppendCharacter(c);
+                        AppendContent(c);
                     }
                     else
                     {
                         if (char.IsHighSurrogate(c))
                         {
-                            AppendCharacter(c);
-                            AppendCharacter(ReadLowSurrogate());
+                            AppendContent(c);
+                            AppendContent(ReadLowSurrogate());
                         }
                         else
                         {
@@ -1299,6 +1376,12 @@ internal ref struct XmlParserInternal
     {
         var dataStart = _length;
         var hasDataSeparator = XmlChar.IsWhiteSpace(c);
+        if (reportInstruction)
+        {
+            // The data starts at the character that the caller already read.
+            StartContent(1);
+        }
+
         if (c == '?')
         {
             c = ReadNext();
@@ -1314,7 +1397,7 @@ internal ref struct XmlParserInternal
             }
 
             if (reportInstruction)
-                AppendCharacter('?');
+                AppendContent('?');
         }
 
         while (true)
@@ -1331,7 +1414,7 @@ internal ref struct XmlParserInternal
 
                         if (reportInstruction)
                         {
-                            _handler.OnProcessingInstruction(GetTextSpan(targetStart).Slice(0, targetLength), GetTextSpan(dataStart), startLine, startColumn);
+                            _handler.OnProcessingInstruction(GetTextSpan(targetStart).Slice(0, targetLength), GetContentSpan(dataStart), startLine, startColumn);
                         }
 
                         ClearCharacterBuffer();
@@ -1339,14 +1422,14 @@ internal ref struct XmlParserInternal
                     }
 
                     if (reportInstruction)
-                        AppendCharacter('?');
+                        AppendContent('?');
 
                     goto ProcessNextChar;
                 case '\n':
                     _line++;
                     _column = -1;
                     if (reportInstruction)
-                        AppendCharacter(c);
+                        AppendContent(c);
 
                     break;
                 case '\r':
@@ -1359,15 +1442,15 @@ internal ref struct XmlParserInternal
                         _column = -1;
                         if (reportInstruction)
                         {
-                            AppendCharacter('\r');
-                            AppendCharacter(c);
+                            AppendContent('\r');
+                            AppendContent(c);
                         }
                     }
                     else
                     {
                         _column = 0;
                         if (reportInstruction)
-                            AppendCharacter('\r');
+                            AppendContent('\r');
 
                         goto ProcessNextChar;
                     }
@@ -1377,7 +1460,7 @@ internal ref struct XmlParserInternal
                     if (XmlChar.IsChar(c))
                     {
                         if (reportInstruction)
-                            AppendCharacter(c);
+                            AppendContent(c);
 
                         break;
                     }
@@ -1387,8 +1470,8 @@ internal ref struct XmlParserInternal
                         var lowSurrogate = ReadLowSurrogate();
                         if (reportInstruction)
                         {
-                            AppendCharacter(c);
-                            AppendCharacter(lowSurrogate);
+                            AppendContent(c);
+                            AppendContent(lowSurrogate);
                         }
 
                         break;
@@ -1526,6 +1609,7 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendCharacter(char c)
     {
+        Debug.Assert(_sliceStart < 0);
         var charBuffer = _buffer;
         var charBufferLength = _length;
         if ((uint)charBufferLength < (uint)charBuffer.Length)
@@ -1567,20 +1651,21 @@ internal ref struct XmlParserInternal
     {
         if (rune.IsBmp)
         {
-            AppendCharacter((char)rune.Value);
+            AppendContent((char)rune.Value);
         }
         else
         {
             var highSurrogate = (char)(0xD7C0 + (rune.Value >> 10));
             var lowSurrogate = (char)(0xDC00 + (rune.Value & 0x3FF));
-            AppendCharacter(highSurrogate);
-            AppendCharacter(lowSurrogate);
+            AppendContent(highSurrogate);
+            AppendContent(lowSurrogate);
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendCharacters(Vector128<ushort> span)
     {
+        Debug.Assert(_sliceStart < 0);
         var charBuffer = _buffer;
         var charBufferLength = _length;
         if (SpanRange.Fits(charBufferLength, Vector128<ushort>.Count, charBuffer.Length))
@@ -1606,6 +1691,7 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AppendCharacters(Vector256<ushort> span)
     {
+        Debug.Assert(_sliceStart < 0);
         var charBuffer = _buffer;
         var charBufferLength = _length;
         if (SpanRange.Fits(charBufferLength, Vector256<ushort>.Count, charBuffer.Length))
@@ -1631,18 +1717,138 @@ internal ref struct XmlParserInternal
     private void ClearCharacterBuffer()
     {
         _length = _lastNameStackIndex;
+        _sliceStart = -1;
     }
 
     private void FlushCharacterBuffer()
     {
+        if (_sliceStart >= 0)
+        {
+            var slice = GetContentSpan(_lastNameStackIndex);
+            if (slice.Length > 0)
+            {
+                // [27] Misc ::= Comment | PI | S, so only whitespace is allowed outside the root element
+                if (_rejectFragments && !HasElementsInStack && slice.ContainsAnyExcept(" \t\r\n"))
+                    XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement, _contentLine, _contentColumn);
+
+                _handler.OnText(slice, _contentLine, _contentColumn);
+            }
+            return;
+        }
+
         var lastNameStackIndex = _lastNameStackIndex;
         var charBufferLength = _length;
         var length = charBufferLength - lastNameStackIndex;
         if (length > 0)
         {
-            _handler.OnText(new ReadOnlySpan<char>(_buffer, lastNameStackIndex, length), _contentLine, _contentColumn);
+            var text = new ReadOnlySpan<char>(_buffer, lastNameStackIndex, length);
+
+            // [27] Misc ::= Comment | PI | S, so only whitespace is allowed outside the root element
+            if (_rejectFragments && !HasElementsInStack && text.ContainsAnyExcept(" \t\r\n"))
+                XmlThrowHelper.ThrowInvalidXml(XmlThrow.InvalidTextOutsideRootElement, _contentLine, _contentColumn);
+
+            _handler.OnText(text, _contentLine, _contentColumn);
             _length = lastNameStackIndex;
         }
+    }
+
+    /// <summary>
+    /// Starts a content (text, CDATA, comment, attribute value or processing instruction data) at the next character to read,
+    /// or <paramref name="charsBack"/> characters before it. For a string input, the content stays a slice of the input
+    /// until <see cref="AppendContent(char)"/> gets a character that differs from the input.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StartContent(int charsBack = 0)
+    {
+        if (_stream.TryGetText(out _, out var index))
+        {
+            _sliceStart = index - charsBack;
+            _sliceLength = 0;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AppendContent(char c)
+    {
+        if (_stream.TryGetText(out var text, out _) && _sliceStart >= 0)
+        {
+            var next = _sliceStart + _sliceLength;
+            if ((uint)next < (uint)text.Length && text[next] == c)
+            {
+                _sliceLength++;
+                return;
+            }
+
+            CopySlice(text);
+        }
+
+        AppendCharacter(c);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AppendContent(Vector128<ushort> data)
+    {
+        // The data is the input at the current position, so it extends the slice when the slice ends there.
+        if (_stream.TryGetText(out var text, out var index) && _sliceStart >= 0)
+        {
+            if (_sliceStart + _sliceLength == index)
+            {
+                _sliceLength += Vector128<ushort>.Count;
+                return;
+            }
+
+            CopySlice(text);
+        }
+
+        AppendCharacters(data);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AppendContent(Vector256<ushort> data)
+    {
+        if (_stream.TryGetText(out var text, out var index) && _sliceStart >= 0)
+        {
+            if (_sliceStart + _sliceLength == index)
+            {
+                _sliceLength += Vector256<ushort>.Count;
+                return;
+            }
+
+            CopySlice(text);
+        }
+
+        AppendCharacters(data);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void CopySlice(string text)
+    {
+        var slice = text.AsSpan(_sliceStart, _sliceLength);
+        _sliceStart = -1;
+        if (_length + slice.Length > _buffer.Length)
+        {
+            Resize(slice.Length);
+        }
+
+        slice.CopyTo(_buffer.AsSpan(_length));
+        _length += slice.Length;
+    }
+
+    /// <summary>
+    /// Gets the content that started at the buffer position <paramref name="index"/>, and ends it.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ReadOnlySpan<char> GetContentSpan(int index)
+    {
+        if (_stream.TryGetText(out var text, out _) && _sliceStart >= 0)
+        {
+            Debug.Assert(_length == index);
+            var span = text.AsSpan(_sliceStart, _sliceLength);
+            _sliceStart = -1;
+            return span;
+        }
+
+        return GetTextSpan(index);
     }
 
     [DoesNotReturn]

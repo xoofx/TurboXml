@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <!-- Major.minor of the package; the patch is computed by the publish workflow (.github/workflows/publish.yml) -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>2.1</MinVerMinimumMajorMinor>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <Description>TurboXml is a .NET library that provides a lightweight and fast SAX - Simple API XML parser by using callbacks.</Description>
     <Copyright>Alexandre Mutel</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>

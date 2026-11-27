@@ -2,6 +2,7 @@
 // Licensed under the BSD-Clause 2 license.
 // See license.txt file in the project root for full license information.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Intrinsics;
 
 namespace TurboXml;
@@ -36,4 +37,12 @@ internal interface ICharProvider
     /// Advance the current position by the specified number of characters.
     /// </summary>
     void Advance(int countChars);
+
+    /// <summary>
+    /// Gets the input string and the position of the next character to read, if the input is a string.
+    /// </summary>
+    /// <param name="text">The input string if true is returned.</param>
+    /// <param name="index">The position in <paramref name="text"/> of the next character to read if true is returned.</param>
+    /// <returns><c>true</c> if the input is a string; otherwise <c>false</c></returns>
+    bool TryGetText([NotNullWhen(true)] out string? text, out int index);
 }
