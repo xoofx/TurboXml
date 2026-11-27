@@ -237,7 +237,7 @@ internal ref struct XmlParserInternal
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ReadOnlySpan<char> GetTextSpan(int index)
     {
-        return MemoryMarshal.CreateReadOnlySpan(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_buffer), index), _length - index);
+        return _buffer.AsSpan(index, _length - index);
     }
 
     private void ParseBeginTag(char c)
@@ -1583,13 +1583,23 @@ internal ref struct XmlParserInternal
     {
         var charBuffer = _buffer;
         var charBufferLength = _length;
-        if (charBufferLength + Vector128<ushort>.Count > charBuffer.Length)
+        if (SpanRange.Fits(charBufferLength, Vector128<ushort>.Count, charBuffer.Length))
         {
-            Resize(Vector128<ushort>.Count);
-            charBuffer = _buffer;
+            span.CopyTo(MemoryMarshal.Cast<char, ushort>(charBuffer.AsSpan(charBufferLength, Vector128<ushort>.Count)));
+            _length = charBufferLength + Vector128<ushort>.Count;
         }
-        Unsafe.As<char, Vector128<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(charBuffer), charBufferLength)) = span;
-        _length = charBufferLength + Vector128<ushort>.Count;
+        else
+        {
+            AppendCharactersAfterResize(span);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void AppendCharactersAfterResize(Vector128<ushort> span)
+    {
+        Resize(Vector128<ushort>.Count);
+        span.CopyTo(MemoryMarshal.Cast<char, ushort>(_buffer.AsSpan(_length, Vector128<ushort>.Count)));
+        _length += Vector128<ushort>.Count;
     }
 
 
@@ -1598,13 +1608,23 @@ internal ref struct XmlParserInternal
     {
         var charBuffer = _buffer;
         var charBufferLength = _length;
-        if (charBufferLength + Vector256<ushort>.Count > charBuffer.Length)
+        if (SpanRange.Fits(charBufferLength, Vector256<ushort>.Count, charBuffer.Length))
         {
-            Resize(Vector256<ushort>.Count);
-            charBuffer = _buffer;
+            span.CopyTo(MemoryMarshal.Cast<char, ushort>(charBuffer.AsSpan(charBufferLength, Vector256<ushort>.Count)));
+            _length = charBufferLength + Vector256<ushort>.Count;
         }
-        Unsafe.As<char, Vector256<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(charBuffer), charBufferLength)) = span;
-        _length = charBufferLength + Vector256<ushort>.Count;
+        else
+        {
+            AppendCharactersAfterResize(span);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void AppendCharactersAfterResize(Vector256<ushort> span)
+    {
+        Resize(Vector256<ushort>.Count);
+        span.CopyTo(MemoryMarshal.Cast<char, ushort>(_buffer.AsSpan(_length, Vector256<ushort>.Count)));
+        _length += Vector256<ushort>.Count;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

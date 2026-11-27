@@ -116,9 +116,11 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
             _index = index;
         }
 
-        if (index + Vector128<ushort>.Count <= _length)
+        var text = _text;
+        var start = (int)index;
+        if (start + Vector128<ushort>.Count <= _length && SpanRange.Fits(start, Vector128<ushort>.Count, text.Length))
         {
-            data = Unsafe.As<char, Vector128<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(_text.AsSpan()), index));
+            data = Vector128.Create(MemoryMarshal.Cast<char, ushort>(new ReadOnlySpan<char>(text, start, Vector128<ushort>.Count)));
             return true;
         }
 
@@ -136,9 +138,11 @@ internal struct StreamCharProvider : ICharProvider, IDisposable
             _index = index;
         }
 
-        if (index + Vector256<ushort>.Count <= _length)
+        var text = _text;
+        var start = (int)index;
+        if (start + Vector256<ushort>.Count <= _length && SpanRange.Fits(start, Vector256<ushort>.Count, text.Length))
         {
-            data = Unsafe.As<char, Vector256<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(_text.AsSpan()), index));
+            data = Vector256.Create(MemoryMarshal.Cast<char, ushort>(new ReadOnlySpan<char>(text, start, Vector256<ushort>.Count)));
             return true;
         }
 

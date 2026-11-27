@@ -43,9 +43,9 @@ internal struct StringCharProvider : ICharProvider
     {
         var text = _text;
         var index = _index;
-        if (index + Vector128<ushort>.Count <= text.Length)
+        if (SpanRange.Fits(index, Vector128<ushort>.Count, text.Length))
         {
-            data = Unsafe.As<char, Vector128<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(text.AsSpan()), index));
+            data = Vector128.Create(MemoryMarshal.Cast<char, ushort>(text.AsSpan(index, Vector128<ushort>.Count)));
             return true;
         }
 
@@ -57,9 +57,9 @@ internal struct StringCharProvider : ICharProvider
     {
         var text = _text;
         var index = _index;
-        if (index + Vector256<ushort>.Count <= text.Length)
+        if (SpanRange.Fits(index, Vector256<ushort>.Count, text.Length))
         {
-            data = Unsafe.As<char, Vector256<ushort>>(ref Unsafe.Add(ref MemoryMarshal.GetReference(text.AsSpan()), index));
+            data = Vector256.Create(MemoryMarshal.Cast<char, ushort>(text.AsSpan(index, Vector256<ushort>.Count)));
             return true;
         }
 

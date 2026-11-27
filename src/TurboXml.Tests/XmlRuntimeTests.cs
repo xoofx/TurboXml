@@ -421,6 +421,30 @@ public class XmlRuntimeTests
     }
 
     [TestMethod]
+    public void TestLongAttributeValueAndTextGrowBuffer()
+    {
+        // 1000 characters are more than the first buffer of the parser, so the vectorized appends grow it several times
+        var value = string.Concat(Enumerable.Range(0, 100).Select(i => $"value{i:D5}"));
+        var text = string.Concat(Enumerable.Range(0, 100).Select(i => $"text{i:D6}"));
+        var xml = $"<a b=\"{value}\">{text}</a>";
+        var expecting = $"""
+                         BeginTag(1:2): a
+                         Attribute(1:4)-(1:6): b="{value}"
+                         Content(1:1009): {text}
+                         EndTag(1:2011): a
+                         """;
+        expecting = NormalizeNewLines(expecting);
+
+        var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
+        XmlParser.Parse(xml, ref handler);
+        Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!));
+
+        handler.Writer = new StringWriter();
+        XmlParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)), ref handler);
+        Assert.AreEqual(expecting, NormalizeNewLines(handler.Writer.ToString()!));
+    }
+
+    [TestMethod]
     public void TestInvalidCharacterInContent()
     {
         var handler = new XmlReadPrintHandler() { Writer = new StringWriter() };
